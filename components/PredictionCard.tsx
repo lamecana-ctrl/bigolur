@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 interface PredictionCardProps {
   id: number;
   fixture_id: number;
@@ -14,8 +16,6 @@ interface PredictionCardProps {
   prediction_label: string;
 
   analysis_status: string;
-
-  // ✔️ TYPE ERROR ÇÖZÜLDÜ
   result_outcome_match: "Başarılı" | "Başarısız" | "Devam Ediyor";
 
   created_at?: string;
@@ -34,6 +34,8 @@ interface PredictionCardProps {
 }
 
 export default function PredictionCard(props: PredictionCardProps) {
+  const router = useRouter();
+
   const isFirstHalf = props.prediction_half === "1Y";
 
   const evProb = isFirstHalf
@@ -57,27 +59,29 @@ export default function PredictionCard(props: PredictionCardProps) {
       })
     : "";
 
-  // ✔️ RENK HARİTASI
-  const statusColors = {
+  // ✓ Durum Renkleri
+  const borderColors = {
     Başarılı: "border-emerald-500/70 shadow-[0_0_12px_#00ff88aa]",
     Başarısız: "border-red-500/70 shadow-[0_0_12px_#ff0000aa]",
     "Devam Ediyor": "border-yellow-400/60 shadow-[0_0_12px_#ffff0099]",
   };
 
-  // ✔️ TYPE PROBLEM TAM ÇÖZÜLDÜ
-  const borderStyle = statusColors[props.result_outcome_match];
+  const borderStyle = borderColors[props.result_outcome_match];
 
   return (
     <div
-      className={`w-full bg-[#0b122d]/70 backdrop-blur-xl rounded-2xl p-4 border ${borderStyle}`}
+      onClick={() => router.push(`/prediction/${props.fixture_id}`)}
+      className={`
+        w-full bg-[#0b122d]/70 backdrop-blur-xl rounded-2xl p-4 border 
+        ${borderStyle}
+        cursor-pointer active:scale-[0.97] transition-all
+      `}
     >
       {/* === ÜST BÖLÜM === */}
       <div className="flex justify-between items-start mb-2">
-        <div>
-          <span className="text-xs font-semibold text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-400/10">
-            {isFirstHalf ? "1. Yarı" : "2. Yarı"}
-          </span>
-        </div>
+        <span className="text-xs font-semibold text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-400/10">
+          {isFirstHalf ? "1. Yarı" : "2. Yarı"}
+        </span>
 
         <div className="text-right">
           <div className="text-[11px] text-white/70">{props.elapsed}'. dk</div>
@@ -97,6 +101,7 @@ export default function PredictionCard(props: PredictionCardProps) {
       {/* === MAÇ SATIRI === */}
       <div className="flex items-center justify-between px-1 my-3">
         <img src={props.home_logo} className="w-8 h-8 rounded-full" />
+
         <div className="w-1/3 text-center text-[12px] text-white/80 font-medium">
           {props.home_team}
         </div>
@@ -114,6 +119,7 @@ export default function PredictionCard(props: PredictionCardProps) {
         <div className="w-1/3 text-center text-[12px] text-white/80 font-medium">
           {props.away_team}
         </div>
+
         <img src={props.away_logo} className="w-8 h-8 rounded-full" />
       </div>
 
@@ -158,7 +164,6 @@ export default function PredictionCard(props: PredictionCardProps) {
 
         <div className="text-right">
           <div className="text-[10px] text-white/50">Durum</div>
-
           <span
             className={`
               px-2 py-0.5 rounded-full text-xs font-semibold
