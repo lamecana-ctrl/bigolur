@@ -87,12 +87,11 @@ export default function HomePage() {
   const loadPredictions = async () => {
     setLoading(true);
 
-    // 🔥 TÜM SATIRLARI ÇEK — limit koyduk (Supabase default = 1000)
     const { data: allRows, error } = await supabase
       .from("predictions")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(50000);
+      .range(0, 50000); // 👈 TÜM KAYITLAR GELİR
 
     if (!allRows || error) {
       setPredictions([]);
@@ -101,22 +100,12 @@ export default function HomePage() {
       return;
     }
 
-    // ------------------- ÜST İSTATİSTİKLER -------------------
+    // İSTATİSTİK HESABI
     const statsFiltered = filterByDate(allRows);
     const groupedStats: Record<string, any> = {};
 
     statsFiltered.forEach((item) => {
-      // prediction_label NORMALİZE → boş ise NO_LABEL
-      const label =
-        item.prediction_label &&
-        item.prediction_label.toString().trim().length > 0
-          ? item.prediction_label.toString().trim()
-          : "NO_LABEL";
-
-      const key = `${item.fixture_id}-${item.prediction_half}-${label}`;
-
-      if (item.result_outcome_match === "Kapandı") return;
-
+      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
       if (!groupedStats[key]) groupedStats[key] = item;
       else {
         const prev = new Date(groupedStats[key].created_at);
@@ -137,22 +126,18 @@ export default function HomePage() {
 
     setStats({ total, success, fail, rate });
 
-    // ------------------- LİSTE (SEKMELER) -------------------
     let listSource: any[] = [];
 
+    // SEKME FİLTRELERİ
     if (statusFilter === "yeni") {
       listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Yeni Tahmin" &&
-          i.result_outcome_match === "Devam Ediyor"
+        (i) => i.analysis_status === "Yeni Tahmin" && i.result_outcome_match === "Devam Ediyor"
       );
     }
 
     if (statusFilter === "analiz") {
       listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Analiz Ediliyor" &&
-          i.result_outcome_match === "Devam Ediyor"
+        (i) => i.analysis_status === "Analiz Ediliyor" && i.result_outcome_match === "Devam Ediyor"
       );
     }
 
@@ -163,29 +148,17 @@ export default function HomePage() {
       );
     }
 
-    // 🔥 GÜÇLENDİRİLMİŞ GROUPING — prediction_label normalize edildi
+    // GRUPLAMA (sinayl_count hesaplama)
     const grouped: Record<string, any> = {};
-
     listSource.forEach((item) => {
-      if (item.result_outcome_match === "Kapandı") return;
-
-      const label =
-        item.prediction_label &&
-        item.prediction_label.toString().trim().length > 0
-          ? item.prediction_label.toString().trim()
-          : "NO_LABEL";
-
-      const key = `${item.fixture_id}-${item.prediction_half}-${label}`;
-
-      if (!grouped[key]) {
-        grouped[key] = { ...item, signal_count: 1 };
-      } else {
+      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
+      if (!grouped[key]) grouped[key] = { ...item, signal_count: 1 };
+      else {
         grouped[key].signal_count++;
+        const prev = new Date(grouped[key].created_at);
+        const curr = new Date(item.created_at);
 
-        const prevCreated = new Date(grouped[key].created_at);
-        const currCreated = new Date(item.created_at);
-
-        if (currCreated > prevCreated) {
+        if (curr > prev) {
           grouped[key] = { ...item, signal_count: grouped[key].signal_count };
         }
       }
@@ -199,16 +172,13 @@ export default function HomePage() {
     loadPredictions();
   }, [timeFilter, statusFilter]);
 
+  // LABELS
   const timeLabel = (filter: TimeFilter) => {
     switch (filter) {
-      case "today":
-        return "Bugün";
-      case "yesterday":
-        return "Dün";
-      case "week":
-        return "Bu Hafta";
-      case "month":
-        return "Bu Ay";
+      case "today": return "Bugün";
+      case "yesterday": return "Dün";
+      case "week": return "Bu Hafta";
+      case "month": return "Bu Ay";
     }
   };
 
@@ -230,9 +200,12 @@ export default function HomePage() {
         : "border-slate-600 text-slate-300 hover:bg-slate-800"
     }`;
 
+  // RENDER
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
+        
+        {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <div className="text-3xl font-extrabold tracking-tight">
@@ -256,21 +229,13 @@ export default function HomePage() {
 
         {/* TARİH FİLTRELERİ */}
         <div className="flex flex-wrap justify-end gap-2 mb-3">
-          <button className={timeButtonClass("today")} onClick={() => setTimeFilter("today")}>
-            Bugün
-          </button>
-          <button className={timeButtonClass("yesterday")} onClick={() => setTimeFilter("yesterday")}>
-            Dün
-          </button>
-          <button className={timeButtonClass("week")} onClick={() => setTimeFilter("week")}>
-            Bu Hafta
-          </button>
-          <button className={timeButtonClass("month")} onClick={() => setTimeFilter("month")}>
-            Bu Ay
-          </button>
+          <button className={timeButtonClass("today")} onClick={() => setTimeFilter("today")}>Bugün</button>
+          <button className={timeButtonClass("yesterday")} onClick={() => setTimeFilter("yesterday")}>Dün</button>
+          <button className={timeButtonClass("week")} onClick={() => setTimeFilter("week")}>Bu Hafta</button>
+          <button className={timeButtonClass("month")} onClick={() => setTimeFilter("month")}>Bu Ay</button>
         </div>
 
-        {/* ÜST İSTATİSTİKLER */}
+        {/* İSTATİSTİKLER */}
         <div className="grid grid-cols-4 gap-2 mb-4 text-center">
           <div className="rounded-xl bg-slate-900/80 border border-slate-700 p-2">
             <div className="text-[10px] text-slate-400">Tahmin</div>
@@ -293,19 +258,26 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* SEKMELER */}
+        {/* SEKME FİLTRELERİ */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <button className={statusButtonClass("yeni")} onClick={() => setStatusFilter("yeni")}>
-            Yeni Tahminler
-          </button>
-          <button className={statusButtonClass("analiz")} onClick={() => setStatusFilter("analiz")}>
-            Analiz Ediliyor
-          </button>
-          <button className={statusButtonClass("sonuc")} onClick={() => setStatusFilter("sonuc")}>
-            Sonuçlanan
-          </button>
+          <button className={statusButtonClass("yeni")} onClick={() => setStatusFilter("yeni")}>Yeni Tahminler</button>
+          <button className={statusButtonClass("analiz")} onClick={() => setStatusFilter("analiz")}>Analiz Ediliyor</button>
+          <button className={statusButtonClass("sonuc")} onClick={() => setStatusFilter("sonuc")}>Sonuçlanan</button>
         </div>
 
+        {/* BAŞLIK */}
+        <div className="mb-2">
+          <h2 className="text-sm font-semibold text-gray-200">
+            {timeLabel(timeFilter)} –{" "}
+            {statusFilter === "yeni"
+              ? "Yeni Tahminler"
+              : statusFilter === "analiz"
+              ? "Analiz Edilen Tahminler"
+              : "Sonuçlanan Tahminler"}
+          </h2>
+        </div>
+
+        {/* LİSTE */}
         {loading && (
           <div className="mt-6 text-center text-xs text-slate-400">
             Yükleniyor...
