@@ -91,8 +91,9 @@ export default function HomePage() {
     const { data: allRows, error } = await supabase
       .from("predictions")
       .select("*")
-      .order("created_at", { ascending: false });
-
+      .order("created_at", { ascending: false })
+      .limit(50000);
+      
     if (!allRows || error) {
       setPredictions([]);
       setStats({ total: 0, success: 0, fail: 0, rate: 0 });
