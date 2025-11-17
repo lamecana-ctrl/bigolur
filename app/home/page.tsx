@@ -45,13 +45,11 @@ export default function HomePage() {
     checkUser();
   }, [router]);
 
-  // DATE FILTER
+  // DATE FILTER (sadece istatistikler ve "sonuçlanan" tabı için)
   const filterByDate = (rows: any[]) => {
     const now = new Date();
     const start = new Date();
     const end = new Date();
-    start.setMilliseconds(0);
-    end.setMilliseconds(0);
 
     switch (timeFilter) {
       case "today":
@@ -100,67 +98,113 @@ export default function HomePage() {
       return;
     }
 
-    const statsFiltered = filterByDate(allRows);
-    const groupedStats: Record<string, any> = {};
+    // 🔍 Normalized alanlar (case-insensitive ve trim’li)
+    const normalized = allRows.map((r) => ({
+      ...r,
+      _analysis: (r.analysis_status || "").toLowerCase().trim(),
+      _result: (r.result_outcome_match || "").toLowerCase().trim(),
+    }));
 
+    // ========== ÜST İSTATİSTİKLER ==========
+    const statsFiltered = filterByDate(normalized);
+
+    // Aynı maç + yarı + label için en son ELAPSED'i seç
+    const groupedStats: Record<string, any> = {};
     statsFiltered.forEach((item) => {
       const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!groupedStats[key]) groupedStats[key] = item;
-      else {
-        const prev = new Date(groupedStats[key].created_at);
-        const curr = new Date(item.created_at);
-        if (curr > prev) groupedStats[key] = item;
+      if (!groupedStats[key]) {
+        groupedStats[key] = item;
+      } else {
+        const prev = groupedStats[key];
+        if (item.elapsed > prev.elapsed) {
+          groupedStats[key] = item;
+        } else if (item.elapsed === prev.elapsed) {
+          const prevDate = new Date(prev.created_at);
+          const currDate = new Date(item.created_at);
+          if (currDate > prevDate) {
+            groupedStats[key] = item;
+          }
+        }
       }
     });
 
     const statsList = Object.values(groupedStats);
-    const sonucRows = statsList.filter((x: any) =>
-      ["Başarılı", "Başarısız"].includes(x.result_outcome_match)
-    );
+
+    const sonucRows = statsList.filter((x: any) => {
+      const r = (x.result_outcome_match || "").toLowerCase().trim();
+      return r.includes("başarılı") || r.includes("basarili") || r.includes("başarısız") || r.includes("basarisiz");
+    });
 
     const total = sonucRows.length;
-    const success = sonucRows.filter((x: any) => x.result_outcome_match === "Başarılı").length;
-    const fail = sonucRows.filter((x: any) => x.result_outcome_match === "Başarısız").length;
+    const success = sonucRows.filter((x: any) => {
+      const r = (x.result_outcome_match || "").toLowerCase().trim();
+      return r.includes("başarılı") || r.includes("basarili");
+    }).length;
+    const fail = sonucRows.filter((x: any) => {
+      const r = (x.result_outcome_match || "").toLowerCase().trim();
+      return r.includes("başarısız") || r.includes("basarisiz");
+    }).length;
     const rate = total ? Math.round((success / total) * 100) : 0;
 
     setStats({ total, success, fail, rate });
 
+    // ========== LİSTE KAYNAĞI ==========
     let listSource: any[] = [];
 
     if (statusFilter === "yeni") {
-      listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Yeni Tahmin" &&
-          i.result_outcome_match === "Devam Ediyor"
-      );
+      listSource = normalized.filter((i) => {
+        const a = i._analysis;
+        const r = i._result;
+        const isYeni = a.includes("yeni");
+        const isDevam = r.includes("devam");
+        return isYeni && isDevam;
+      });
     }
 
     if (statusFilter === "analiz") {
-      listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Analiz Ediliyor" &&
-          i.result_outcome_match === "Devam Ediyor"
-      );
+      listSource = normalized.filter((i) => {
+        const a = i._analysis;
+        const r = i._result;
+        const isAnaliz = a.includes("analiz");
+        const isDevam = r.includes("devam");
+        return isAnaliz && isDevam;
+      });
     }
 
     if (statusFilter === "sonuc") {
-      const byDate = filterByDate(allRows);
-      listSource = byDate.filter((i) =>
-        ["Başarılı", "Başarısız"].includes(i.result_outcome_match)
-      );
+      const byDate = filterByDate(normalized);
+      listSource = byDate.filter((i) => {
+        const r = i._result;
+        return r.includes("başarılı") || r.includes("basarili") || r.includes("başarısız") || r.includes("basarisiz");
+      });
     }
 
+    // ========== GROUPING (liste için) ==========
     const grouped: Record<string, any> = {};
+
     listSource.forEach((item) => {
       const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!grouped[key]) grouped[key] = { ...item, signal_count: 1 };
-      else {
-        grouped[key].signal_count++;
-        const prev = new Date(grouped[key].created_at);
-        const curr = new Date(item.created_at);
-        if (curr > prev) {
-          grouped[key] = { ...item, signal_count: grouped[key].signal_count };
+      if (!grouped[key]) {
+        grouped[key] = { ...item, signal_count: 1 };
+      } else {
+        const prev = grouped[key];
+
+        // Sinyal say
+        const currentCount = (prev.signal_count || 1) + 1;
+
+        // En son ELAPSED'i seç, eşitse created_at'e bak
+        let chosen = prev;
+        if (item.elapsed > prev.elapsed) {
+          chosen = item;
+        } else if (item.elapsed === prev.elapsed) {
+          const prevDate = new Date(prev.created_at);
+          const currDate = new Date(item.created_at);
+          if (currDate > prevDate) {
+            chosen = item;
+          }
         }
+
+        grouped[key] = { ...chosen, signal_count: currentCount };
       }
     });
 
@@ -206,7 +250,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
-
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
