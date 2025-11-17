@@ -32,7 +32,9 @@ export default function HomePage() {
 
   const [loading, setLoading] = useState(false);
 
-  // USER CHECK
+  // -----------------------------
+  //  USER CHECK
+  // -----------------------------
   useEffect(() => {
     const checkUser = async () => {
       const { data, error } = await supabase.auth.getUser();
@@ -45,28 +47,35 @@ export default function HomePage() {
     checkUser();
   }, [router]);
 
-  // DATE FILTER (sadece istatistikler ve "sonuçlanan" tabı için)
+  // -----------------------------
+  // DATE FILTER
+  // -----------------------------
   const filterByDate = (rows: any[]) => {
     const now = new Date();
     const start = new Date();
     const end = new Date();
+    start.setMilliseconds(0);
+    end.setMilliseconds(0);
 
     switch (timeFilter) {
       case "today":
         start.setHours(0, 0, 0, 0);
         end.setHours(23, 59, 59, 999);
         break;
+
       case "yesterday":
         start.setDate(now.getDate() - 1);
         start.setHours(0, 0, 0, 0);
         end.setDate(now.getDate() - 1);
         end.setHours(23, 59, 59, 999);
         break;
+
       case "week":
         start.setDate(now.getDate() - 6);
         start.setHours(0, 0, 0, 0);
         end.setHours(23, 59, 59, 999);
         break;
+
       case "month":
         start.setFullYear(now.getFullYear(), now.getMonth(), 1);
         start.setHours(0, 0, 0, 0);
@@ -81,14 +90,16 @@ export default function HomePage() {
     });
   };
 
-  // LOAD PREDICTIONS
+  // -----------------------------
+  // LOAD PREDICTIONS (ANA MANTIK)
+  // -----------------------------
   const loadPredictions = async () => {
     setLoading(true);
 
+    // ❗ 1) TÜM snapshot'ları çekiyoruz (Kapandı filtresi YOK)
     const { data: allRows, error } = await supabase
       .from("predictions")
       .select("*")
-      .neq("result_outcome_match", "Kapandı")
       .order("created_at", { ascending: false });
 
     if (!allRows || error) {
@@ -98,136 +109,100 @@ export default function HomePage() {
       return;
     }
 
-    // 🔍 Normalized alanlar (case-insensitive ve trim’li)
-    const normalized = allRows.map((r) => ({
-      ...r,
-      _analysis: (r.analysis_status || "").toLowerCase().trim(),
-      _result: (r.result_outcome_match || "").toLowerCase().trim(),
-    }));
+    // -----------------------------
+    // 2) Fixture bazlı grupla
+    // -----------------------------
+    const fixtureGroups: Record<string, any[]> = {};
 
-    // ========== ÜST İSTATİSTİKLER ==========
-    const statsFiltered = filterByDate(normalized);
+    allRows.forEach((row) => {
+      if (!fixtureGroups[row.fixture_id]) fixtureGroups[row.fixture_id] = [];
+      fixtureGroups[row.fixture_id].push(row);
+    });
 
-    // Aynı maç + yarı + label için en son ELAPSED'i seç
-    const groupedStats: Record<string, any> = {};
-    statsFiltered.forEach((item) => {
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!groupedStats[key]) {
-        groupedStats[key] = item;
-      } else {
-        const prev = groupedStats[key];
-        if (item.elapsed > prev.elapsed) {
-          groupedStats[key] = item;
-        } else if (item.elapsed === prev.elapsed) {
-          const prevDate = new Date(prev.created_at);
-          const currDate = new Date(item.created_at);
-          if (currDate > prevDate) {
-            groupedStats[key] = item;
-          }
+    // -----------------------------
+    // 3) Tümü Kapandı olan maçları ayıkla
+    // -----------------------------
+    const activeFixtures = Object.entries(fixtureGroups).filter(
+      ([fixture_id, rows]) => rows.some((r: any) => r.result_outcome_match !== "Kapandı")
+    );
+
+    // -----------------------------
+    // 4) Her maç için EN GÜNCEL snapshot'ı al
+    // -----------------------------
+    const newestSnapshots = activeFixtures.map(([fixture_id, rows]) => {
+      let best = rows[0];
+
+      rows.forEach((r: any) => {
+        if (new Date(r.created_at) > new Date(best.created_at)) {
+          best = r;
         }
-      }
+      });
+
+      return best;
     });
 
-    const statsList = Object.values(groupedStats);
-
-    const sonucRows = statsList.filter((x: any) => {
-      const r = (x.result_outcome_match || "").toLowerCase().trim();
-      return r.includes("başarılı") || r.includes("basarili") || r.includes("başarısız") || r.includes("basarisiz");
-    });
+    // -----------------------------
+    // 5) ÜST İSTATİSTİKLER (SONUÇLANANLAR)
+    // -----------------------------
+    const statsFiltered = filterByDate(newestSnapshots);
+    const sonucRows = statsFiltered.filter((x: any) =>
+      ["Başarılı", "Başarısız"].includes(x.result_outcome_match)
+    );
 
     const total = sonucRows.length;
-    const success = sonucRows.filter((x: any) => {
-      const r = (x.result_outcome_match || "").toLowerCase().trim();
-      return r.includes("başarılı") || r.includes("basarili");
-    }).length;
-    const fail = sonucRows.filter((x: any) => {
-      const r = (x.result_outcome_match || "").toLowerCase().trim();
-      return r.includes("başarısız") || r.includes("basarisiz");
-    }).length;
+    const success = sonucRows.filter((x: any) => x.result_outcome_match === "Başarılı").length;
+    const fail = sonucRows.filter((x: any) => x.result_outcome_match === "Başarısız").length;
     const rate = total ? Math.round((success / total) * 100) : 0;
 
     setStats({ total, success, fail, rate });
 
-    // ========== LİSTE KAYNAĞI ==========
-    let listSource: any[] = [];
+    // -----------------------------
+    // 6) SEKMELERE GÖRE LİSTE
+    // -----------------------------
+    let list: any[] = [];
 
     if (statusFilter === "yeni") {
-      listSource = normalized.filter((i) => {
-        const a = i._analysis;
-        const r = i._result;
-        const isYeni = a.includes("yeni");
-        const isDevam = r.includes("devam");
-        return isYeni && isDevam;
-      });
+      list = newestSnapshots.filter(
+        (i) =>
+          i.analysis_status === "Yeni Tahmin" &&
+          i.result_outcome_match === "Devam Ediyor"
+      );
     }
 
     if (statusFilter === "analiz") {
-      listSource = normalized.filter((i) => {
-        const a = i._analysis;
-        const r = i._result;
-        const isAnaliz = a.includes("analiz");
-        const isDevam = r.includes("devam");
-        return isAnaliz && isDevam;
-      });
+      list = newestSnapshots.filter(
+        (i) =>
+          i.analysis_status === "Analiz Ediliyor" &&
+          i.result_outcome_match === "Devam Ediyor"
+      );
     }
 
     if (statusFilter === "sonuc") {
-      const byDate = filterByDate(normalized);
-      listSource = byDate.filter((i) => {
-        const r = i._result;
-        return r.includes("başarılı") || r.includes("basarili") || r.includes("başarısız") || r.includes("basarisiz");
-      });
+      const byDate = filterByDate(newestSnapshots);
+      list = byDate.filter((i) =>
+        ["Başarılı", "Başarısız"].includes(i.result_outcome_match)
+      );
     }
 
-    // ========== GROUPING (liste için) ==========
-    const grouped: Record<string, any> = {};
-
-    listSource.forEach((item) => {
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!grouped[key]) {
-        grouped[key] = { ...item, signal_count: 1 };
-      } else {
-        const prev = grouped[key];
-
-        // Sinyal say
-        const currentCount = (prev.signal_count || 1) + 1;
-
-        // En son ELAPSED'i seç, eşitse created_at'e bak
-        let chosen = prev;
-        if (item.elapsed > prev.elapsed) {
-          chosen = item;
-        } else if (item.elapsed === prev.elapsed) {
-          const prevDate = new Date(prev.created_at);
-          const currDate = new Date(item.created_at);
-          if (currDate > prevDate) {
-            chosen = item;
-          }
-        }
-
-        grouped[key] = { ...chosen, signal_count: currentCount };
-      }
-    });
-
-    setPredictions(Object.values(grouped));
+    setPredictions(list);
     setLoading(false);
   };
 
+  // YENİ / ANALİZ / SONUÇ YENİDEN YÜKLER
   useEffect(() => {
     loadPredictions();
   }, [timeFilter, statusFilter]);
 
-  const timeLabel = (filter: TimeFilter) => {
-    switch (filter) {
-      case "today":
-        return "Bugün";
-      case "yesterday":
-        return "Dün";
-      case "week":
-        return "Bu Hafta";
-      case "month":
-        return "Bu Ay";
-    }
-  };
+  // UI COMPONENT ---------------------------------------------------------------------
+
+  const timeLabel = (t: TimeFilter) =>
+    t === "today"
+      ? "Bugün"
+      : t === "yesterday"
+      ? "Dün"
+      : t === "week"
+      ? "Bu Hafta"
+      : "Bu Ay";
 
   const statusButtonClass = (mode: StatusFilter) =>
     `px-3 py-1.5 rounded-full text-[11px] border transition-colors ${
@@ -250,6 +225,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
+
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -334,10 +310,6 @@ export default function HomePage() {
               ? "Analiz Edilen Tahminler"
               : "Sonuçlanan Tahminler"}
           </h2>
-
-          <p className="text-[11px] text-gray-500">
-            Model tarafından oluşturulan tahmin listesi.
-          </p>
         </div>
 
         {/* LİSTE */}
@@ -358,10 +330,6 @@ export default function HomePage() {
             <PredictionCard
               key={p.id}
               {...p}
-              signal_count={p.signal_count}
-              created_at={p.created_at}
-              home_goals={p.home_goals}
-              away_goals={p.away_goals}
             />
           ))}
         </div>
