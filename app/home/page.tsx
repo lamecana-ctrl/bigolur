@@ -83,24 +83,57 @@ export default function HomePage() {
     });
   };
 
+  // TÜM PREDICTIONLARI SAYFA SAYFA ÇEK (1000'er)
+  const fetchAllPredictions = async (): Promise<any[]> => {
+    const PAGE_SIZE = 1000;
+    let allRows: any[] = [];
+    let from = 0;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("predictions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error("Supabase predictions fetch error:", error);
+        break;
+      }
+
+      if (!data || data.length === 0) {
+        break;
+      }
+
+      allRows = allRows.concat(data);
+
+      if (data.length < PAGE_SIZE) {
+        // Son sayfa
+        break;
+      }
+
+      from += PAGE_SIZE;
+    }
+
+    // Debug için konsolda kaç satır geldiğini gör
+    console.log("📊 Toplam prediction satırı (client):", allRows.length);
+    return allRows;
+  };
+
   // LOAD PREDICTIONS
   const loadPredictions = async () => {
     setLoading(true);
 
-    const { data: allRows, error } = await supabase
-      .from("predictions")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(0, 50000); // 👈 TÜM KAYITLAR GELİR
+    const allRows = await fetchAllPredictions();
 
-    if (!allRows || error) {
+    if (!allRows || allRows.length === 0) {
       setPredictions([]);
       setStats({ total: 0, success: 0, fail: 0, rate: 0 });
       setLoading(false);
       return;
     }
 
-    // İSTATİSTİK HESABI
+    // === İSTATİSTİKLER ===
     const statsFiltered = filterByDate(allRows);
     const groupedStats: Record<string, any> = {};
 
@@ -126,45 +159,55 @@ export default function HomePage() {
 
     setStats({ total, success, fail, rate });
 
+    // === LİSTE İÇİN DATA ===
     let listSource: any[] = [];
 
-    // SEKME FİLTRELERİ
     if (statusFilter === "yeni") {
+      // Yeni Tahminler → sadece Yeni Tahmin + Devam Ediyor
       listSource = allRows.filter(
-        (i) => i.analysis_status === "Yeni Tahmin" && i.result_outcome_match === "Devam Ediyor"
+        (i) =>
+          i.analysis_status === "Yeni Tahmin" &&
+          i.result_outcome_match === "Devam Ediyor"
       );
     }
 
     if (statusFilter === "analiz") {
+      // Analiz Ediliyor → sadece Analiz Ediliyor + Devam Ediyor
       listSource = allRows.filter(
-        (i) => i.analysis_status === "Analiz Ediliyor" && i.result_outcome_match === "Devam Ediyor"
+        (i) =>
+          i.analysis_status === "Analiz Ediliyor" &&
+          i.result_outcome_match === "Devam Ediyor"
       );
     }
 
     if (statusFilter === "sonuc") {
+      // Sonuçlanan → sadece Başarılı / Başarısız + tarih filtresi
       const byDate = filterByDate(allRows);
       listSource = byDate.filter((i) =>
         ["Başarılı", "Başarısız"].includes(i.result_outcome_match)
       );
     }
 
-    // GRUPLAMA (sinayl_count hesaplama)
+    // Gruplama (fixture_id + prediction_half + prediction_label)
     const grouped: Record<string, any> = {};
     listSource.forEach((item) => {
       const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!grouped[key]) grouped[key] = { ...item, signal_count: 1 };
-      else {
+      if (!grouped[key]) {
+        grouped[key] = { ...item, signal_count: 1 };
+      } else {
         grouped[key].signal_count++;
         const prev = new Date(grouped[key].created_at);
         const curr = new Date(item.created_at);
-
         if (curr > prev) {
           grouped[key] = { ...item, signal_count: grouped[key].signal_count };
         }
       }
     });
 
-    setPredictions(Object.values(grouped));
+    const finalList = Object.values(grouped);
+    console.log("📋 Gösterilecek kayıt sayısı:", finalList.length);
+
+    setPredictions(finalList);
     setLoading(false);
   };
 
@@ -172,13 +215,16 @@ export default function HomePage() {
     loadPredictions();
   }, [timeFilter, statusFilter]);
 
-  // LABELS
   const timeLabel = (filter: TimeFilter) => {
     switch (filter) {
-      case "today": return "Bugün";
-      case "yesterday": return "Dün";
-      case "week": return "Bu Hafta";
-      case "month": return "Bu Ay";
+      case "today":
+        return "Bugün";
+      case "yesterday":
+        return "Dün";
+      case "week":
+        return "Bu Hafta";
+      case "month":
+        return "Bu Ay";
     }
   };
 
@@ -200,11 +246,10 @@ export default function HomePage() {
         : "border-slate-600 text-slate-300 hover:bg-slate-800"
     }`;
 
-  // RENDER
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
-        
+
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -229,40 +274,83 @@ export default function HomePage() {
 
         {/* TARİH FİLTRELERİ */}
         <div className="flex flex-wrap justify-end gap-2 mb-3">
-          <button className={timeButtonClass("today")} onClick={() => setTimeFilter("today")}>Bugün</button>
-          <button className={timeButtonClass("yesterday")} onClick={() => setTimeFilter("yesterday")}>Dün</button>
-          <button className={timeButtonClass("week")} onClick={() => setTimeFilter("week")}>Bu Hafta</button>
-          <button className={timeButtonClass("month")} onClick={() => setTimeFilter("month")}>Bu Ay</button>
+          <button
+            className={timeButtonClass("today")}
+            onClick={() => setTimeFilter("today")}
+          >
+            Bugün
+          </button>
+          <button
+            className={timeButtonClass("yesterday")}
+            onClick={() => setTimeFilter("yesterday")}
+          >
+            Dün
+          </button>
+          <button
+            className={timeButtonClass("week")}
+            onClick={() => setTimeFilter("week")}
+          >
+            Bu Hafta
+          </button>
+          <button
+            className={timeButtonClass("month")}
+            onClick={() => setTimeFilter("month")}
+          >
+            Bu Ay
+          </button>
         </div>
 
-        {/* İSTATİSTİKLER */}
+        {/* ÜST İSTATİSTİKLER */}
         <div className="grid grid-cols-4 gap-2 mb-4 text-center">
           <div className="rounded-xl bg-slate-900/80 border border-slate-700 p-2">
             <div className="text-[10px] text-slate-400">Tahmin</div>
-            <div className="mt-1 text-lg font-bold text-white">{stats.total}</div>
+            <div className="mt-1 text-lg font-bold text-white">
+              {stats.total}
+            </div>
           </div>
 
           <div className="rounded-xl bg-slate-900/80 border border-emerald-500/60 p-2">
             <div className="text-[10px] text-slate-400">Başarılı</div>
-            <div className="mt-1 text-lg font-bold text-emerald-400">{stats.success}</div>
+            <div className="mt-1 text-lg font-bold text-emerald-400">
+              {stats.success}
+            </div>
           </div>
 
           <div className="rounded-xl bg-slate-900/80 border border-red-500/70 p-2">
             <div className="text-[10px] text-slate-400">Başarısız</div>
-            <div className="mt-1 text-lg font-bold text-red-400">{stats.fail}</div>
+            <div className="mt-1 text-lg font-bold text-red-400">
+              {stats.fail}
+            </div>
           </div>
 
           <div className="rounded-xl bg-slate-900/80 border border-sky-500/70 p-2">
             <div className="text-[10px] text-slate-400">Oran</div>
-            <div className="mt-1 text-lg font-bold text-sky-400">%{stats.rate}</div>
+            <div className="mt-1 text-lg font-bold text-sky-400">
+              %{stats.rate}
+            </div>
           </div>
         </div>
 
-        {/* SEKME FİLTRELERİ */}
+        {/* SEKMELER */}
         <div className="flex flex-wrap gap-2 mb-4">
-          <button className={statusButtonClass("yeni")} onClick={() => setStatusFilter("yeni")}>Yeni Tahminler</button>
-          <button className={statusButtonClass("analiz")} onClick={() => setStatusFilter("analiz")}>Analiz Ediliyor</button>
-          <button className={statusButtonClass("sonuc")} onClick={() => setStatusFilter("sonuc")}>Sonuçlanan</button>
+          <button
+            className={statusButtonClass("yeni")}
+            onClick={() => setStatusFilter("yeni")}
+          >
+            Yeni Tahminler
+          </button>
+          <button
+            className={statusButtonClass("analiz")}
+            onClick={() => setStatusFilter("analiz")}
+          >
+            Analiz Ediliyor
+          </button>
+          <button
+            className={statusButtonClass("sonuc")}
+            onClick={() => setStatusFilter("sonuc")}
+          >
+            Sonuçlanan
+          </button>
         </div>
 
         {/* BAŞLIK */}
@@ -275,6 +363,9 @@ export default function HomePage() {
               ? "Analiz Edilen Tahminler"
               : "Sonuçlanan Tahminler"}
           </h2>
+          <p className="text-[11px] text-gray-500">
+            Model tarafından oluşturulan tahmin listesi.
+          </p>
         </div>
 
         {/* LİSTE */}
