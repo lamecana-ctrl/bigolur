@@ -87,13 +87,13 @@ export default function HomePage() {
   const loadPredictions = async () => {
     setLoading(true);
 
-    // ❗ Kapandı filtresi KALDIRILDI – hepsini çekiyoruz
+    // 🔥 TÜM SATIRLARI ÇEK — limit koyduk (Supabase default = 1000)
     const { data: allRows, error } = await supabase
       .from("predictions")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(50000);
-      
+
     if (!allRows || error) {
       setPredictions([]);
       setStats({ total: 0, success: 0, fail: 0, rate: 0 });
@@ -106,10 +106,15 @@ export default function HomePage() {
     const groupedStats: Record<string, any> = {};
 
     statsFiltered.forEach((item) => {
-      // fixture + half + label bazlı anahtar
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
+      // prediction_label NORMALİZE → boş ise NO_LABEL
+      const label =
+        item.prediction_label &&
+        item.prediction_label.toString().trim().length > 0
+          ? item.prediction_label.toString().trim()
+          : "NO_LABEL";
 
-      // Kapandı olanlar istatistiğe girmesin (güvenlik)
+      const key = `${item.fixture_id}-${item.prediction_half}-${label}`;
+
       if (item.result_outcome_match === "Kapandı") return;
 
       if (!groupedStats[key]) groupedStats[key] = item;
@@ -158,21 +163,27 @@ export default function HomePage() {
       );
     }
 
-    // fixture + half + label bazlı grupla (ESKİ MANTIK)
+    // 🔥 GÜÇLENDİRİLMİŞ GROUPING — prediction_label normalize edildi
     const grouped: Record<string, any> = {};
+
     listSource.forEach((item) => {
-      // Kapandı olanlar kartlara girmesin (ek güvenlik)
       if (item.result_outcome_match === "Kapandı") return;
 
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
+      const label =
+        item.prediction_label &&
+        item.prediction_label.toString().trim().length > 0
+          ? item.prediction_label.toString().trim()
+          : "NO_LABEL";
+
+      const key = `${item.fixture_id}-${item.prediction_half}-${label}`;
 
       if (!grouped[key]) {
         grouped[key] = { ...item, signal_count: 1 };
       } else {
+        grouped[key].signal_count++;
+
         const prevCreated = new Date(grouped[key].created_at);
         const currCreated = new Date(item.created_at);
-
-        grouped[key].signal_count++;
 
         if (currCreated > prevCreated) {
           grouped[key] = { ...item, signal_count: grouped[key].signal_count };
@@ -222,7 +233,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
-        {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <div className="text-3xl font-extrabold tracking-tight">
@@ -296,19 +306,6 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* BAŞLIK */}
-        <div className="mb-2">
-          <h2 className="text-sm font-semibold text-gray-200">
-            {timeLabel(timeFilter)} –{" "}
-            {statusFilter === "yeni"
-              ? "Yeni Tahminler"
-              : statusFilter === "analiz"
-              ? "Analiz Edilen Tahminler"
-              : "Sonuçlanan Tahminler"}
-          </h2>
-        </div>
-
-        {/* LİSTE */}
         {loading && (
           <div className="mt-6 text-center text-xs text-slate-400">
             Yükleniyor...
