@@ -32,9 +32,7 @@ export default function HomePage() {
 
   const [loading, setLoading] = useState(false);
 
-  // -----------------------------
-  //  USER CHECK
-  // -----------------------------
+  // USER CHECK
   useEffect(() => {
     const checkUser = async () => {
       const { data, error } = await supabase.auth.getUser();
@@ -47,9 +45,7 @@ export default function HomePage() {
     checkUser();
   }, [router]);
 
-  // -----------------------------
   // DATE FILTER
-  // -----------------------------
   const filterByDate = (rows: any[]) => {
     const now = new Date();
     const start = new Date();
@@ -62,20 +58,17 @@ export default function HomePage() {
         start.setHours(0, 0, 0, 0);
         end.setHours(23, 59, 59, 999);
         break;
-
       case "yesterday":
         start.setDate(now.getDate() - 1);
         start.setHours(0, 0, 0, 0);
         end.setDate(now.getDate() - 1);
         end.setHours(23, 59, 59, 999);
         break;
-
       case "week":
         start.setDate(now.getDate() - 6);
         start.setHours(0, 0, 0, 0);
         end.setHours(23, 59, 59, 999);
         break;
-
       case "month":
         start.setFullYear(now.getFullYear(), now.getMonth(), 1);
         start.setHours(0, 0, 0, 0);
@@ -90,13 +83,11 @@ export default function HomePage() {
     });
   };
 
-  // -----------------------------
-  // LOAD PREDICTIONS (ANA MANTIK)
-  // -----------------------------
+  // LOAD PREDICTIONS
   const loadPredictions = async () => {
     setLoading(true);
 
-    // ❗ 1) TÜM snapshot'ları çekiyoruz (Kapandı filtresi YOK)
+    // ❗ Kapandı filtresi KALDIRILDI – hepsini çekiyoruz
     const { data: allRows, error } = await supabase
       .from("predictions")
       .select("*")
@@ -109,43 +100,27 @@ export default function HomePage() {
       return;
     }
 
-    // -----------------------------
-    // 2) Fixture bazlı grupla
-    // -----------------------------
-    const fixtureGroups: Record<string, any[]> = {};
+    // ------------------- ÜST İSTATİSTİKLER -------------------
+    const statsFiltered = filterByDate(allRows);
+    const groupedStats: Record<string, any> = {};
 
-    allRows.forEach((row) => {
-      if (!fixtureGroups[row.fixture_id]) fixtureGroups[row.fixture_id] = [];
-      fixtureGroups[row.fixture_id].push(row);
+    statsFiltered.forEach((item) => {
+      // fixture + half + label bazlı anahtar
+      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
+
+      // Kapandı olanlar istatistiğe girmesin (güvenlik)
+      if (item.result_outcome_match === "Kapandı") return;
+
+      if (!groupedStats[key]) groupedStats[key] = item;
+      else {
+        const prev = new Date(groupedStats[key].created_at);
+        const curr = new Date(item.created_at);
+        if (curr > prev) groupedStats[key] = item;
+      }
     });
 
-    // -----------------------------
-    // 3) Tümü Kapandı olan maçları ayıkla
-    // -----------------------------
-    const activeFixtures = Object.entries(fixtureGroups).filter(
-      ([fixture_id, rows]) => rows.some((r: any) => r.result_outcome_match !== "Kapandı")
-    );
-
-    // -----------------------------
-    // 4) Her maç için EN GÜNCEL snapshot'ı al
-    // -----------------------------
-    const newestSnapshots = activeFixtures.map(([fixture_id, rows]) => {
-      let best = rows[0];
-
-      rows.forEach((r: any) => {
-        if (new Date(r.created_at) > new Date(best.created_at)) {
-          best = r;
-        }
-      });
-
-      return best;
-    });
-
-    // -----------------------------
-    // 5) ÜST İSTATİSTİKLER (SONUÇLANANLAR)
-    // -----------------------------
-    const statsFiltered = filterByDate(newestSnapshots);
-    const sonucRows = statsFiltered.filter((x: any) =>
+    const statsList = Object.values(groupedStats);
+    const sonucRows = statsList.filter((x: any) =>
       ["Başarılı", "Başarısız"].includes(x.result_outcome_match)
     );
 
@@ -156,13 +131,11 @@ export default function HomePage() {
 
     setStats({ total, success, fail, rate });
 
-    // -----------------------------
-    // 6) SEKMELERE GÖRE LİSTE
-    // -----------------------------
-    let list: any[] = [];
+    // ------------------- LİSTE (SEKMELER) -------------------
+    let listSource: any[] = [];
 
     if (statusFilter === "yeni") {
-      list = newestSnapshots.filter(
+      listSource = allRows.filter(
         (i) =>
           i.analysis_status === "Yeni Tahmin" &&
           i.result_outcome_match === "Devam Ediyor"
@@ -170,7 +143,7 @@ export default function HomePage() {
     }
 
     if (statusFilter === "analiz") {
-      list = newestSnapshots.filter(
+      listSource = allRows.filter(
         (i) =>
           i.analysis_status === "Analiz Ediliyor" &&
           i.result_outcome_match === "Devam Ediyor"
@@ -178,31 +151,54 @@ export default function HomePage() {
     }
 
     if (statusFilter === "sonuc") {
-      const byDate = filterByDate(newestSnapshots);
-      list = byDate.filter((i) =>
+      const byDate = filterByDate(allRows);
+      listSource = byDate.filter((i) =>
         ["Başarılı", "Başarısız"].includes(i.result_outcome_match)
       );
     }
 
-    setPredictions(list);
+    // fixture + half + label bazlı grupla (ESKİ MANTIK)
+    const grouped: Record<string, any> = {};
+    listSource.forEach((item) => {
+      // Kapandı olanlar kartlara girmesin (ek güvenlik)
+      if (item.result_outcome_match === "Kapandı") return;
+
+      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
+
+      if (!grouped[key]) {
+        grouped[key] = { ...item, signal_count: 1 };
+      } else {
+        const prevCreated = new Date(grouped[key].created_at);
+        const currCreated = new Date(item.created_at);
+
+        grouped[key].signal_count++;
+
+        if (currCreated > prevCreated) {
+          grouped[key] = { ...item, signal_count: grouped[key].signal_count };
+        }
+      }
+    });
+
+    setPredictions(Object.values(grouped));
     setLoading(false);
   };
 
-  // YENİ / ANALİZ / SONUÇ YENİDEN YÜKLER
   useEffect(() => {
     loadPredictions();
   }, [timeFilter, statusFilter]);
 
-  // UI COMPONENT ---------------------------------------------------------------------
-
-  const timeLabel = (t: TimeFilter) =>
-    t === "today"
-      ? "Bugün"
-      : t === "yesterday"
-      ? "Dün"
-      : t === "week"
-      ? "Bu Hafta"
-      : "Bu Ay";
+  const timeLabel = (filter: TimeFilter) => {
+    switch (filter) {
+      case "today":
+        return "Bugün";
+      case "yesterday":
+        return "Dün";
+      case "week":
+        return "Bu Hafta";
+      case "month":
+        return "Bu Ay";
+    }
+  };
 
   const statusButtonClass = (mode: StatusFilter) =>
     `px-3 py-1.5 rounded-full text-[11px] border transition-colors ${
@@ -225,7 +221,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
-
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -330,6 +325,10 @@ export default function HomePage() {
             <PredictionCard
               key={p.id}
               {...p}
+              signal_count={p.signal_count}
+              created_at={p.created_at}
+              home_goals={p.home_goals}
+              away_goals={p.away_goals}
             />
           ))}
         </div>
