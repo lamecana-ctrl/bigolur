@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { getComments, addComment } from "@/services/commentService";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
+
+const supabase = getSupabase();
 
 export default function CommentModal({
   predictionId,
