@@ -31,9 +31,9 @@ export default function HomePage() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
-  // -------------------------------
-  // FILTER STATE
-  // -------------------------------
+  // ---------------------------------------
+  // FILTER STATE (TS FIX — "any" as literal)
+  // ---------------------------------------
   const [filters, setFilters] = useState({
     predictionTypes: {
       over05: false,
@@ -44,15 +44,15 @@ export default function HomePage() {
     },
     probs: { home: 0, away: 0, match: 0 },
     minute: { min: 0, max: 90 },
-    score: { mode: "any", diff: 0 },
+    score: { mode: "any" as "any", diff: 0 },
     half: "all" as "all" | "1Y" | "2Y",
     league: "",
     team: "",
   });
 
-  // -------------------------------
-  // AUTH
-  // -------------------------------
+  // ---------------------------------------
+  // AUTH CHECK
+  // ---------------------------------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
@@ -64,9 +64,9 @@ export default function HomePage() {
     });
   }, []);
 
-  // -------------------------------
+  // ---------------------------------------
   // FIRST FETCH
-  // -------------------------------
+  // ---------------------------------------
   const loadData = async () => {
     try {
       const rows = await fetchActiveLatestPredictions();
@@ -76,13 +76,12 @@ export default function HomePage() {
     }
   };
 
-  // -------------------------------
-  // REALTIME (INSERT + DELETE)
-  // -------------------------------
+  // ---------------------------------------
+  // REALTIME INSERT + DELETE
+  // ---------------------------------------
   useEffect(() => {
     const channel = supabase
       .channel("predictions-realtime")
-
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "predictions" },
@@ -94,7 +93,6 @@ export default function HomePage() {
           });
         }
       )
-
       .on(
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "predictions" },
@@ -104,17 +102,16 @@ export default function HomePage() {
           );
         }
       )
-
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel); // ❗ async değil → Vercel sorunsuz
+      supabase.removeChannel(channel);
     };
   }, []);
 
-  // -------------------------------
-  // POLLING (UPDATE — 15s)
-  // -------------------------------
+  // ---------------------------------------
+  // POLLING — 15s
+  // ---------------------------------------
   useEffect(() => {
     const interval = setInterval(async () => {
       const rows = await fetchActiveLatestPredictions();
@@ -148,9 +145,9 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // -------------------------------
-  // FILTERS APPLY
-  // -------------------------------
+  // ---------------------------------------
+  // APPLY FILTERS
+  // ---------------------------------------
   useEffect(() => {
     const updated = applyFilters(
       allPredictions,
@@ -161,9 +158,9 @@ export default function HomePage() {
     setFiltered(updated);
   }, [allPredictions, filters, timeFilter, statusFilter]);
 
-  // -------------------------------
+  // ---------------------------------------
   // COUNTERS
-  // -------------------------------
+  // ---------------------------------------
   const liveCount = new Set(
     allPredictions
       .filter(
@@ -221,9 +218,9 @@ export default function HomePage() {
   const successRate =
     totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
 
-  // -------------------------------
+  // ---------------------------------------
   // RENDER
-  // -------------------------------
+  // ---------------------------------------
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
@@ -252,33 +249,27 @@ export default function HomePage() {
 
         {/* TIME FILTERS */}
         <div className="flex flex-wrap gap-2 mb-4 justify-end">
-          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
-            timeFilter === "today"
-              ? "bg-emerald-500 text-black"
-              : "border-slate-600 text-slate-300"
-          }`}
-          onClick={() => setTimeFilter("today")}>Bugün</button>
-
-          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
-            timeFilter === "yesterday"
-              ? "bg-emerald-500 text-black"
-              : "border-slate-600 text-slate-300"
-          }`}
-          onClick={() => setTimeFilter("yesterday")}>Dün</button>
-
-          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
-            timeFilter === "week"
-              ? "bg-emerald-500 text-black"
-              : "border-slate-600 text-slate-300"
-          }`}
-          onClick={() => setTimeFilter("week")}>Bu Hafta</button>
-
-          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
-            timeFilter === "month"
-              ? "bg-emerald-500 text-black"
-              : "border-slate-600 text-slate-300"
-          }`}
-          onClick={() => setTimeFilter("month")}>Bu Ay</button>
+          {(["today", "yesterday", "week", "month"] as TimeFilter[]).map(
+            (mode) => (
+              <button
+                key={mode}
+                className={`px-3 py-1.5 rounded-full text-[11px] border ${
+                  timeFilter === mode
+                    ? "bg-emerald-500 text-black"
+                    : "border-slate-600 text-slate-300"
+                }`}
+                onClick={() => setTimeFilter(mode)}
+              >
+                {mode === "today"
+                  ? "Bugün"
+                  : mode === "yesterday"
+                  ? "Dün"
+                  : mode === "week"
+                  ? "Bu Hafta"
+                  : "Bu Ay"}
+              </button>
+            )
+          )}
         </div>
 
         {/* COUNTERS */}
@@ -300,12 +291,16 @@ export default function HomePage() {
 
           <div className="p-2 rounded-xl bg-[#0f172a] border border-green-600 text-center">
             <div className="text-[11px] text-green-300">Başarılı</div>
-            <div className="text-green-400 font-bold text-lg">{successCount}</div>
+            <div className="text-green-400 font-bold text-lg">
+              {successCount}
+            </div>
           </div>
 
           <div className="p-2 rounded-xl bg-[#0f172a] border border-yellow-600 text-center">
             <div className="text-[11px] text-yellow-300">%Oran</div>
-            <div className="text-yellow-400 font-bold text-lg">%{successRate}</div>
+            <div className="text-yellow-400 font-bold text-lg">
+              %{successRate}
+            </div>
           </div>
         </div>
 
