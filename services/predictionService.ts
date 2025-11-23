@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/supabaseClient";
+import type { Prediction } from "@/types/prediction"; // ⭐ EKLEDİK
 
 const supabase = getSupabase();
 
@@ -12,12 +13,12 @@ export async function fetchActiveLatestPredictions() {
 
     if (error) {
       console.error("❌ Prediction fetch error:", error);
-      return [];
+      return [] as Prediction[];        // ⭐ Tip güvenli boş liste
     }
 
-    return data || [];
+    return (data || []) as Prediction[]; // ⭐ EN ÖNEMLİ SATIR
   } catch (err) {
     console.error("❌ Prediction fetch exception:", err);
-    return [];
+    return [] as Prediction[];          // ⭐ Tip güvenli boş liste
   }
 }
