@@ -207,7 +207,7 @@ export default function PredictionCard(props: PredictionCardProps) {
         <div className="flex justify-between items-center mb-3">
           <div className="flex flex-col items-center w-20">
             <img
-              src={props.home_logo ?? ""}
+              src={props.home_logo ? props.home_logo : "/placeholder.png"}
               className="w-10 h-10 rounded-full border border-slate-600"
             />
             <span className="text-[11px] text-gray-300 mt-1">
@@ -226,7 +226,7 @@ export default function PredictionCard(props: PredictionCardProps) {
 
           <div className="flex flex-col items-center w-20">
             <img
-              src={props.away_logo ?? ""}
+              src={props.away_logo ? props.away_logo : "/placeholder.png"}
               className="w-10 h-10 rounded-full border border-slate-600"
             />
             <span className="text-[11px] text-gray-300 mt-1">
