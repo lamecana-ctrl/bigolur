@@ -3,15 +3,16 @@
 import { useState, useEffect } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 
-
 export default function ProfilePage() {
   const supabase = getSupabase();
+
   const [darkMode, setDarkMode] = useState(false);
   const [notificationAllowed, setNotificationAllowed] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [language, setLanguage] = useState("Türkçe");
 
-  const [user, setUser] = useState(null);
+  // ❗ user tipi any yapıldı → TS hatası çözülüyor
+  const [user, setUser] = useState<any>(null);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
 
@@ -22,10 +23,8 @@ export default function ProfilePage() {
 
       if (data?.user) {
         setUser(data.user);
-        setEmail(data.user.email);
-
-        // display_name metadata
-        setDisplayName(data.user.user_metadata?.display_name || "");
+        setEmail(data.user.email ?? "");
+        setDisplayName(data.user.user_metadata?.display_name ?? "");
       }
     };
 
@@ -36,7 +35,7 @@ export default function ProfilePage() {
   const updateProfile = async () => {
     const { error } = await supabase.auth.updateUser({
       email,
-      data: { display_name: displayName }
+      data: { display_name: displayName },
     });
 
     if (error) {
@@ -44,11 +43,11 @@ export default function ProfilePage() {
       return;
     }
 
-    // Güncel kullanıcıyı tekrar çek
     const { data: refreshed } = await supabase.auth.getUser();
+
     if (refreshed?.user) {
       setUser(refreshed.user);
-      setDisplayName(refreshed.user.user_metadata?.display_name);
+      setDisplayName(refreshed.user.user_metadata?.display_name ?? "");
     }
 
     alert("Profil güncellendi!");
@@ -93,7 +92,6 @@ export default function ProfilePage() {
           <p className="text-gray-900 dark:text-gray-100 text-lg font-semibold">
             {displayName || "Kullanıcı"}
           </p>
-
           <p className="text-gray-500 dark:text-gray-400 text-sm">{email}</p>
         </div>
       </div>
@@ -103,7 +101,6 @@ export default function ProfilePage() {
         <h2 className="text-lg font-semibold mb-3 dark:text-white">Bilgileri Güncelle</h2>
 
         <div className="flex flex-col gap-3">
-          {/* Display Name */}
           <div>
             <label className="text-sm dark:text-gray-300">Görünen Ad</label>
             <input
@@ -114,7 +111,6 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Email */}
           <div>
             <label className="text-sm dark:text-gray-300">E-Posta</label>
             <input
@@ -134,28 +130,19 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ==== ALT MENÜ ==== */}
+      {/* ==== AYARLAR ==== */}
       <div className="space-y-4">
         <Section>
           <Item label="Bildirimler" type="toggle" value={notificationAllowed} onChange={requestNotificationPermission} />
           <Item label="Sesli Bildirimler" type="toggle" value={soundEnabled} onChange={() => setSoundEnabled(!soundEnabled)} />
-          <Item label="Bildirim İzni" type="button" buttonText="İzin Ver" onClick={requestNotificationPermission} />
         </Section>
 
         <Section>
           <Item label="Dil" type="select" options={["Türkçe", "English", "Español"]} value={language} onChange={(e) => setLanguage(e.target.value)} />
-          <Item label="Promosyon Kodu" type="button" buttonText="Kodu Gir" onClick={() => alert("Promosyon açılacak")} />
-        </Section>
-
-        <Section>
-          <Item label="SSS" type="link" onClick={() => alert("SSS açılacak")} />
-          <Item label="Bize Ulaşın" type="link" onClick={() => alert("İletişim açılacak")} />
         </Section>
 
         <Section>
           <Item label="Koyu Tema" type="toggle" value={darkMode} onChange={toggleDarkMode} />
-          <Item label="Gizlilik Politikası" type="link" onClick={() => alert("Gizlilik açılacak")} />
-          <Item label="Kullanım Şartları" type="link" onClick={() => alert("Şartlar açılacak")} />
         </Section>
 
         <Section>
@@ -182,7 +169,7 @@ function Item({ label, type, value, onChange, onClick, buttonText, options }) {
       <span className="text-gray-800 dark:text-gray-200">{label}</span>
 
       {type === "toggle" && (
-        <input type="checkbox" checked={value} onChange={onChange} className="toggle toggle-success" />
+        <input type="checkbox" checked={value} onChange={onChange} />
       )}
 
       {type === "button" && (
@@ -191,14 +178,12 @@ function Item({ label, type, value, onChange, onClick, buttonText, options }) {
         </button>
       )}
 
-      {type === "link" && (
-        <button onClick={onClick} className="text-blue-600 dark:text-blue-400 font-medium">
-          Aç
-        </button>
-      )}
-
       {type === "select" && (
-        <select value={value} onChange={onChange} className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg text-sm">
+        <select
+          value={value}
+          onChange={onChange}
+          className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg text-sm"
+        >
           {options.map((op) => (
             <option key={op}>{op}</option>
           ))}
