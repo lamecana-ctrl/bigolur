@@ -11,7 +11,6 @@ export default function ProfilePage() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [language, setLanguage] = useState("Türkçe");
 
-  // ❗ user tipi any yapıldı → TS hatası çözülüyor
   const [user, setUser] = useState<any>(null);
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -23,15 +22,15 @@ export default function ProfilePage() {
 
       if (data?.user) {
         setUser(data.user);
-        setEmail(data.user.email ?? "");
-        setDisplayName(data.user.user_metadata?.display_name ?? "");
+        setEmail(data.user.email);
+        setDisplayName(data.user.user_metadata?.display_name || "");
       }
     };
 
     fetchUser();
   }, []);
 
-  // === USER UPDATE (email + display_name) ===
+  // === USER UPDATE ===
   const updateProfile = async () => {
     const { error } = await supabase.auth.updateUser({
       email,
@@ -44,16 +43,15 @@ export default function ProfilePage() {
     }
 
     const { data: refreshed } = await supabase.auth.getUser();
-
     if (refreshed?.user) {
       setUser(refreshed.user);
-      setDisplayName(refreshed.user.user_metadata?.display_name ?? "");
+      setDisplayName(refreshed.user.user_metadata?.display_name);
     }
 
     alert("Profil güncellendi!");
   };
 
-  // === Bildirim İzni Kontrol ===
+  // === Notification Permission ===
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
       setNotificationAllowed(Notification.permission === "granted");
@@ -65,7 +63,7 @@ export default function ProfilePage() {
     setNotificationAllowed(permission === "granted");
   };
 
-  // === Koyu Tema ===
+  // === Dark Mode ===
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
     if (!darkMode) document.documentElement.classList.add("dark");
@@ -75,14 +73,14 @@ export default function ProfilePage() {
   // === Logout ===
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = "/";
+    window.location.href = "/login";
   };
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
       <h1 className="text-2xl font-bold mb-6 dark:text-white">Profil</h1>
 
-      {/* ==== PROFİL ÜST BLOK ==== */}
+      {/* === USER INFO === */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 flex items-center gap-4 mb-4">
         <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white text-xl font-bold">
           {(displayName || email)?.charAt(0)?.toUpperCase()}
@@ -92,13 +90,16 @@ export default function ProfilePage() {
           <p className="text-gray-900 dark:text-gray-100 text-lg font-semibold">
             {displayName || "Kullanıcı"}
           </p>
+
           <p className="text-gray-500 dark:text-gray-400 text-sm">{email}</p>
         </div>
       </div>
 
-      {/* ==== PROFİL DÜZENLEME ==== */}
+      {/* === UPDATE FORM === */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 mb-4">
-        <h2 className="text-lg font-semibold mb-3 dark:text-white">Bilgileri Güncelle</h2>
+        <h2 className="text-lg font-semibold mb-3 dark:text-white">
+          Bilgileri Güncelle
+        </h2>
 
         <div className="flex flex-col gap-3">
           <div>
@@ -130,19 +131,75 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* ==== AYARLAR ==== */}
+      {/* === SETTINGS === */}
       <div className="space-y-4">
         <Section>
-          <Item label="Bildirimler" type="toggle" value={notificationAllowed} onChange={requestNotificationPermission} />
-          <Item label="Sesli Bildirimler" type="toggle" value={soundEnabled} onChange={() => setSoundEnabled(!soundEnabled)} />
+          <Item
+            label="Bildirimler"
+            type="toggle"
+            value={notificationAllowed}
+            onChange={requestNotificationPermission}
+          />
+          <Item
+            label="Sesli Bildirimler"
+            type="toggle"
+            value={soundEnabled}
+            onChange={() => setSoundEnabled(!soundEnabled)}
+          />
+          <Item
+            label="Bildirim İzni"
+            type="button"
+            buttonText="İzin Ver"
+            onClick={requestNotificationPermission}
+          />
         </Section>
 
         <Section>
-          <Item label="Dil" type="select" options={["Türkçe", "English", "Español"]} value={language} onChange={(e) => setLanguage(e.target.value)} />
+          <Item
+            label="Dil"
+            type="select"
+            options={["Türkçe", "English", "Español"]}
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+          />
+          <Item
+            label="Promosyon Kodu"
+            type="button"
+            buttonText="Kodu Gir"
+            onClick={() => alert("Promosyon açılacak")}
+          />
         </Section>
 
         <Section>
-          <Item label="Koyu Tema" type="toggle" value={darkMode} onChange={toggleDarkMode} />
+          <Item
+            label="SSS"
+            type="link"
+            onClick={() => alert("SSS açılacak")}
+          />
+          <Item
+            label="Bize Ulaşın"
+            type="link"
+            onClick={() => alert("İletişim açılacak")}
+          />
+        </Section>
+
+        <Section>
+          <Item
+            label="Koyu Tema"
+            type="toggle"
+            value={darkMode}
+            onChange={toggleDarkMode}
+          />
+          <Item
+            label="Gizlilik Politikası"
+            type="link"
+            onClick={() => alert("Gizlilik açılacak")}
+          />
+          <Item
+            label="Kullanım Şartları"
+            type="link"
+            onClick={() => alert("Şartlar açılacak")}
+          />
         </Section>
 
         <Section>
@@ -153,9 +210,11 @@ export default function ProfilePage() {
   );
 }
 
-/* ==== SUB COMPONENTS ==== */
+/* ------------------------------ */
+/* SECTION CONTAINER */
+/* ------------------------------ */
 
-function Section({ children }) {
+function Section({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-4 space-y-3">
       {children}
@@ -163,35 +222,96 @@ function Section({ children }) {
   );
 }
 
-function Item({ label, type, value, onChange, onClick, buttonText, options }) {
+/* ------------------------------ */
+/* ITEM PROPS — TÜM TİPLER AYRILMIŞ (Hatasız) */
+/* ------------------------------ */
+
+type ItemProps =
+  | {
+      label: string;
+      type: "toggle";
+      value: boolean;
+      onChange: (v: any) => void;
+    }
+  | {
+      label: string;
+      type: "button";
+      buttonText: string;
+      onClick: () => void;
+    }
+  | {
+      label: string;
+      type: "select";
+      value: string;
+      options: string[];
+      onChange: (e: any) => void;
+    }
+  | {
+      label: string;
+      type: "link";
+      onClick: () => void;
+    }
+  | {
+      label: string;
+      type: "danger";
+      onClick: () => void;
+    };
+
+/* ------------------------------ */
+/* ITEM COMPONENT */
+/* ------------------------------ */
+
+function Item(props: ItemProps) {
+  const { label } = props;
+
   return (
     <div className="flex items-center justify-between py-2">
       <span className="text-gray-800 dark:text-gray-200">{label}</span>
 
-      {type === "toggle" && (
-        <input type="checkbox" checked={value} onChange={onChange} />
+      {props.type === "toggle" && (
+        <input
+          type="checkbox"
+          checked={props.value}
+          onChange={props.onChange}
+          className="toggle toggle-success"
+        />
       )}
 
-      {type === "button" && (
-        <button onClick={onClick} className="px-3 py-1 rounded-xl bg-blue-600 text-white text-sm">
-          {buttonText}
+      {props.type === "button" && (
+        <button
+          onClick={props.onClick}
+          className="px-3 py-1 rounded-xl bg-blue-600 text-white text-sm"
+        >
+          {props.buttonText}
         </button>
       )}
 
-      {type === "select" && (
+      {props.type === "select" && (
         <select
-          value={value}
-          onChange={onChange}
+          value={props.value}
+          onChange={props.onChange}
           className="bg-gray-200 dark:bg-gray-700 p-1 rounded-lg text-sm"
         >
-          {options.map((op) => (
+          {props.options.map((op) => (
             <option key={op}>{op}</option>
           ))}
         </select>
       )}
 
-      {type === "danger" && (
-        <button onClick={onClick} className="text-red-600 font-semibold">
+      {props.type === "link" && (
+        <button
+          onClick={props.onClick}
+          className="text-blue-600 dark:text-blue-400 font-medium"
+        >
+          Aç
+        </button>
+      )}
+
+      {props.type === "danger" && (
+        <button
+          onClick={props.onClick}
+          className="text-red-600 font-semibold"
+        >
           Çıkış Yap
         </button>
       )}
