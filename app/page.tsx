@@ -3,12 +3,12 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 import Logo from "@/components/Logo";
 
 export default function SplashPage() {
   const router = useRouter();
-
+  const supabase = getSupabase();     
   useEffect(() => {
     const check = async () => {
       const { data } = await supabase.auth.getSession();

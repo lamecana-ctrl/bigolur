@@ -2,254 +2,234 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+
+import FiltersPanel from "@/components/FiltersPanel";
 import PredictionCard from "@/components/PredictionCard";
+
+import { fetchActiveLatestPredictions } from "@/services/predictionService";
+import { applyFilters } from "@/utils/filterFunctions";
+import { getSupabase } from "@/lib/supabaseClient";
 
 type TimeFilter = "today" | "yesterday" | "week" | "month";
 type StatusFilter = "yeni" | "analiz" | "sonuc";
 
-type Stats = {
-  total: number;
-  success: number;
-  fail: number;
-  rate: number;
-};
-
 export default function HomePage() {
+  const supabase = getSupabase();
   const router = useRouter();
 
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(true);
+
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("today");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("yeni");
 
-  const [predictions, setPredictions] = useState<any[]>([]);
-  const [stats, setStats] = useState<Stats>({
-    total: 0,
-    success: 0,
-    fail: 0,
-    rate: 0,
+  const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
+  const [filtered, setFiltered] = useState<Prediction[]>([]);
+
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
+
+  const [filters, setFilters] = useState({
+    predictionTypes: {
+      over05: false,
+      over15: false,
+      over25: false,
+      over35: false,
+      over45: false,
+    },
+    probs: { home: 0, away: 0, match: 0 },
+    minute: { min: 0, max: 90 },
+    score: { mode: "any", diff: 0 },
+    half: "all" as "all" | "1Y" | "2Y",
+    league: "",
+    team: "",
   });
 
-  const [loading, setLoading] = useState(false);
-
-  // USER CHECK
+  // AUTH
   useEffect(() => {
-    const checkUser = async () => {
-      const { data, error } = await supabase.auth.getUser();
+    supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
         router.push("/login");
         return;
       }
+
       setEmail(data.user.email || "");
-    };
-    checkUser();
-  }, [router]);
-
-  // DATE FILTER
-  const filterByDate = (rows: any[]) => {
-    const now = new Date();
-    const start = new Date();
-    const end = new Date();
-    start.setMilliseconds(0);
-    end.setMilliseconds(0);
-
-    switch (timeFilter) {
-      case "today":
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-        break;
-      case "yesterday":
-        start.setDate(now.getDate() - 1);
-        start.setHours(0, 0, 0, 0);
-        end.setDate(now.getDate() - 1);
-        end.setHours(23, 59, 59, 999);
-        break;
-      case "week":
-        start.setDate(now.getDate() - 6);
-        start.setHours(0, 0, 0, 0);
-        end.setHours(23, 59, 59, 999);
-        break;
-      case "month":
-        start.setFullYear(now.getFullYear(), now.getMonth(), 1);
-        start.setHours(0, 0, 0, 0);
-        end.setFullYear(now.getFullYear(), now.getMonth() + 1, 0);
-        end.setHours(23, 59, 59, 999);
-        break;
-    }
-
-    return rows.filter((item) => {
-      const created = new Date(item.created_at);
-      return created >= start && created <= end;
+      loadData();
     });
-  };
+  }, []);
 
-  // TÜM PREDICTIONLARI SAYFA SAYFA ÇEK (1000'er)
-  const fetchAllPredictions = async (): Promise<any[]> => {
-    const PAGE_SIZE = 1000;
-    let allRows: any[] = [];
-    let from = 0;
-
-    while (true) {
-      const { data, error } = await supabase
-        .from("predictions")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        console.error("Supabase predictions fetch error:", error);
-        break;
-      }
-
-      if (!data || data.length === 0) {
-        break;
-      }
-
-      allRows = allRows.concat(data);
-
-      if (data.length < PAGE_SIZE) {
-        // Son sayfa
-        break;
-      }
-
-      from += PAGE_SIZE;
-    }
-
-    // Debug için konsolda kaç satır geldiğini gör
-    console.log("📊 Toplam prediction satırı (client):", allRows.length);
-    return allRows;
-  };
-
-  // LOAD PREDICTIONS
-  const loadPredictions = async () => {
-    setLoading(true);
-
-    const allRows = await fetchAllPredictions();
-
-    if (!allRows || allRows.length === 0) {
-      setPredictions([]);
-      setStats({ total: 0, success: 0, fail: 0, rate: 0 });
+  // FIRST FETCH
+  const loadData = async () => {
+    try {
+      const rows = await fetchActiveLatestPredictions();
+      setAllPredictions(rows);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // === İSTATİSTİKLER ===
-    const statsFiltered = filterByDate(allRows);
-    const groupedStats: Record<string, any> = {};
-
-    statsFiltered.forEach((item) => {
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!groupedStats[key]) groupedStats[key] = item;
-      else {
-        const prev = new Date(groupedStats[key].created_at);
-        const curr = new Date(item.created_at);
-        if (curr > prev) groupedStats[key] = item;
-      }
-    });
-
-    const statsList = Object.values(groupedStats);
-    const sonucRows = statsList.filter((x: any) =>
-      ["Başarılı", "Başarısız"].includes(x.result_outcome_match)
-    );
-
-    const total = sonucRows.length;
-    const success = sonucRows.filter((x: any) => x.result_outcome_match === "Başarılı").length;
-    const fail = sonucRows.filter((x: any) => x.result_outcome_match === "Başarısız").length;
-    const rate = total ? Math.round((success / total) * 100) : 0;
-
-    setStats({ total, success, fail, rate });
-
-    // === LİSTE İÇİN DATA ===
-    let listSource: any[] = [];
-
-    if (statusFilter === "yeni") {
-      // Yeni Tahminler → sadece Yeni Tahmin + Devam Ediyor
-      listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Yeni Tahmin" &&
-          i.result_outcome_match === "Devam Ediyor"
-      );
-    }
-
-    if (statusFilter === "analiz") {
-      // Analiz Ediliyor → sadece Analiz Ediliyor + Devam Ediyor
-      listSource = allRows.filter(
-        (i) =>
-          i.analysis_status === "Analiz Ediliyor" &&
-          i.result_outcome_match === "Devam Ediyor"
-      );
-    }
-
-    if (statusFilter === "sonuc") {
-      // Sonuçlanan → sadece Başarılı / Başarısız + tarih filtresi
-      const byDate = filterByDate(allRows);
-      listSource = byDate.filter((i) =>
-        ["Başarılı", "Başarısız"].includes(i.result_outcome_match)
-      );
-    }
-
-    // Gruplama (fixture_id + prediction_half + prediction_label)
-    const grouped: Record<string, any> = {};
-    listSource.forEach((item) => {
-      const key = `${item.fixture_id}-${item.prediction_half}-${item.prediction_label}`;
-      if (!grouped[key]) {
-        grouped[key] = { ...item, signal_count: 1 };
-      } else {
-        grouped[key].signal_count++;
-        const prev = new Date(grouped[key].created_at);
-        const curr = new Date(item.created_at);
-        if (curr > prev) {
-          grouped[key] = { ...item, signal_count: grouped[key].signal_count };
-        }
-      }
-    });
-
-    const finalList = Object.values(grouped);
-    console.log("📋 Gösterilecek kayıt sayısı:", finalList.length);
-
-    setPredictions(finalList);
-    setLoading(false);
   };
 
+  // REALTIME (INSERT + DELETE)
   useEffect(() => {
-    loadPredictions();
-  }, [timeFilter, statusFilter]);
+    const channel = supabase
+      .channel("predictions-realtime")
 
-  const timeLabel = (filter: TimeFilter) => {
-    switch (filter) {
-      case "today":
-        return "Bugün";
-      case "yesterday":
-        return "Dün";
-      case "week":
-        return "Bu Hafta";
-      case "month":
-        return "Bu Ay";
+      // INSERT → sadece ekle
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "predictions" },
+        (payload) => {
+          setAllPredictions((prev) => {
+            const exists = prev.some((p) => p.id === payload.new.id);
+            if (exists) return prev;
+            return [payload.new, ...prev];
+          });
+        }
+      )
+
+      // DELETE → sadece çıkar
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "predictions" },
+        (payload) => {
+          setAllPredictions((prev) =>
+            prev.filter((p) => p.id !== payload.old.id)
+          );
+        }
+      )
+
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  // POLLING — UPDATE işlemleri için (15 saniye)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const rows = await fetchActiveLatestPredictions();
+
+      setAllPredictions((prev) => {
+        const prevMap = new Map(prev.map((p) => [p.id, p]));
+        const nextMap = new Map(rows.map((p) => [p.id, p]));
+
+        let changed = false;
+
+        for (const id of nextMap.keys()) {
+          const oldRow = prevMap.get(id);
+          const newRow = nextMap.get(id);
+          if (!oldRow) continue;
+
+          // field-by-field karşılaştırma
+          for (const key in newRow) {
+            if (newRow[key] !== oldRow[key]) {
+              changed = true;
+              break;
+            }
+          }
+        }
+
+        if (!changed) return prev;
+        return rows;
+      });
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // FILTERS
+  useEffect(() => {
+    const updated = applyFilters(
+      allPredictions,
+      filters,
+      timeFilter,
+      statusFilter
+    );
+    setFiltered(updated);
+  }, [allPredictions, filters, timeFilter, statusFilter]);
+
+  // COUNTERS
+  const liveCount = new Set(
+    allPredictions
+      .filter(
+        (p) =>
+          p.analysis_status === "Analiz Ediliyor" &&
+          p.result_outcome_match === "Devam Ediyor"
+      )
+      .map((p) => p.fixture_id)
+  ).size;
+
+  const newCount = new Set(
+    allPredictions
+      .filter(
+        (p) =>
+          p.analysis_status === "Yeni Tahmin" &&
+          p.result_outcome_match === "Devam Ediyor"
+      )
+      .map((p) => `${p.fixture_id}-${p.prediction_half}-${p.prediction_label}`)
+  ).size;
+
+  const resultPool = allPredictions.filter((p) =>
+    ["Başarılı", "Başarısız"].includes(p.result_outcome_match)
+  );
+
+  const filteredResults = resultPool.filter((p) => {
+    const created = new Date(p.created_at);
+    const now = new Date();
+
+    let start = new Date();
+    let end = new Date();
+
+    if (timeFilter === "today") {
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+    } else if (timeFilter === "yesterday") {
+      start.setDate(now.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end.setDate(now.getDate() - 1);
+      end.setHours(23, 59, 59, 999);
+    } else if (timeFilter === "week") {
+      start.setDate(now.getDate() - 6);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      );
     }
-  };
 
-  const statusButtonClass = (mode: StatusFilter) =>
-    `px-3 py-1.5 rounded-full text-[11px] border transition-colors ${
-      statusFilter === mode
-        ? mode === "yeni"
-          ? "bg-emerald-500 text-black border-emerald-500"
-          : mode === "analiz"
-          ? "bg-yellow-400 text-black border-yellow-400"
-          : "bg-sky-500 text-black border-sky-500"
-        : "border-slate-600 text-slate-300 hover:bg-slate-800"
+    return created >= start && created <= end;
+  });
+
+  const totalCount = filteredResults.length;
+  const successCount = filteredResults.filter(
+    (p) => p.result_outcome_match === "Başarılı"
+  ).length;
+  const successRate =
+    totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
+
+  // UI classes
+  const timeBtn = (mode: TimeFilter) =>
+    `px-3 py-1.5 rounded-full text-[11px] border ${
+      timeFilter === mode
+        ? "bg-emerald-500 text-black"
+        : "border-slate-600 text-slate-300"
     }`;
 
-  const timeButtonClass = (mode: TimeFilter) =>
-    `px-3 py-1.5 rounded-full text-[11px] border transition-colors ${
-      timeFilter === mode
-        ? "bg-emerald-500 text-black border-emerald-500"
-        : "border-slate-600 text-slate-300 hover:bg-slate-800"
+  const statusBtn = (mode: StatusFilter) =>
+    `px-4 py-1 rounded-full text-[12px] border ${
+      statusFilter === mode
+        ? "bg-sky-500 text-black"
+        : "border-slate-700 text-slate-300"
     }`;
 
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
-
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -272,127 +252,145 @@ export default function HomePage() {
           </button>
         </div>
 
-        {/* TARİH FİLTRELERİ */}
-        <div className="flex flex-wrap justify-end gap-2 mb-3">
-          <button
-            className={timeButtonClass("today")}
-            onClick={() => setTimeFilter("today")}
-          >
+        {/* TIME FILTERS */}
+        <div className="flex flex-wrap gap-2 mb-4 justify-end">
+          <button className={timeBtn("today")} onClick={() => setTimeFilter("today")}>
             Bugün
           </button>
-          <button
-            className={timeButtonClass("yesterday")}
-            onClick={() => setTimeFilter("yesterday")}
-          >
+          <button className={timeBtn("yesterday")} onClick={() => setTimeFilter("yesterday")}>
             Dün
           </button>
-          <button
-            className={timeButtonClass("week")}
-            onClick={() => setTimeFilter("week")}
-          >
+          <button className={timeBtn("week")} onClick={() => setTimeFilter("week")}>
             Bu Hafta
           </button>
-          <button
-            className={timeButtonClass("month")}
-            onClick={() => setTimeFilter("month")}
-          >
+          <button className={timeBtn("month")} onClick={() => setTimeFilter("month")}>
             Bu Ay
           </button>
         </div>
 
-        {/* ÜST İSTATİSTİKLER */}
-        <div className="grid grid-cols-4 gap-2 mb-4 text-center">
-          <div className="rounded-xl bg-slate-900/80 border border-slate-700 p-2">
-            <div className="text-[10px] text-slate-400">Tahmin</div>
-            <div className="mt-1 text-lg font-bold text-white">
-              {stats.total}
-            </div>
+        {/* COUNTERS */}
+        <div className="grid grid-cols-5 gap-2 mb-5">
+          <div className="p-2 rounded-xl bg-[#0f172a] border border-sky-600 text-center">
+            <div className="text-[11px] text-sky-300">Canlı</div>
+            <div className="text-sky-400 font-bold text-lg">{liveCount}</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-emerald-500/60 p-2">
-            <div className="text-[10px] text-slate-400">Başarılı</div>
-            <div className="mt-1 text-lg font-bold text-emerald-400">
-              {stats.success}
-            </div>
+          <div className="p-2 rounded-xl bg-[#0f172a] border border-emerald-600 text-center">
+            <div className="text-[11px] text-emerald-300">Yeni</div>
+            <div className="text-emerald-400 font-bold text-lg">{newCount}</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-red-500/70 p-2">
-            <div className="text-[10px] text-slate-400">Başarısız</div>
-            <div className="mt-1 text-lg font-bold text-red-400">
-              {stats.fail}
-            </div>
+          <div className="p-2 rounded-xl bg-[#0f172a] border border-slate-600 text-center">
+            <div className="text-[11px] text-slate-300">Toplam</div>
+            <div className="text-slate-200 font-bold text-lg">{totalCount}</div>
           </div>
 
-          <div className="rounded-xl bg-slate-900/80 border border-sky-500/70 p-2">
-            <div className="text-[10px] text-slate-400">Oran</div>
-            <div className="mt-1 text-lg font-bold text-sky-400">
-              %{stats.rate}
-            </div>
+          <div className="p-2 rounded-xl bg-[#0f172a] border border-green-600 text-center">
+            <div className="text-[11px] text-green-300">Başarılı</div>
+            <div className="text-green-400 font-bold text-lg">{successCount}</div>
+          </div>
+
+          <div className="p-2 rounded-xl bg-[#0f172a] border border-yellow-600 text-center">
+            <div className="text-[11px] text-yellow-300">%Oran</div>
+            <div className="text-yellow-400 font-bold text-lg">%{successRate}</div>
           </div>
         </div>
 
-        {/* SEKMELER */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <button
-            className={statusButtonClass("yeni")}
-            onClick={() => setStatusFilter("yeni")}
-          >
-            Yeni Tahminler
-          </button>
-          <button
-            className={statusButtonClass("analiz")}
-            onClick={() => setStatusFilter("analiz")}
-          >
-            Analiz Ediliyor
-          </button>
-          <button
-            className={statusButtonClass("sonuc")}
-            onClick={() => setStatusFilter("sonuc")}
-          >
-            Sonuçlanan
-          </button>
+        {/* STATUS FILTERS */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex gap-2">
+            <button className={statusBtn("yeni")} onClick={() => setStatusFilter("yeni")}>
+              Yeni Tahmin
+            </button>
+            <button className={statusBtn("analiz")} onClick={() => setStatusFilter("analiz")}>
+              Canlı Analiz
+            </button>
+            <button className={statusBtn("sonuc")} onClick={() => setStatusFilter("sonuc")}>
+              Sonuçlar
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilterPanelOpen(true)}
+              className="px-2 py-1 rounded-lg bg-slate-800 border border-slate-600 text-[13px]"
+            >
+              ⚙️
+            </button>
+
+            <button
+              onClick={() => setSortOpen(!sortOpen)}
+              className="px-2 py-1 rounded-lg bg-slate-800 border border-slate-600 text-[13px]"
+            >
+              ⇅
+            </button>
+          </div>
         </div>
 
-        {/* BAŞLIK */}
-        <div className="mb-2">
-          <h2 className="text-sm font-semibold text-gray-200">
-            {timeLabel(timeFilter)} –{" "}
-            {statusFilter === "yeni"
-              ? "Yeni Tahminler"
-              : statusFilter === "analiz"
-              ? "Analiz Edilen Tahminler"
-              : "Sonuçlanan Tahminler"}
-          </h2>
-          <p className="text-[11px] text-gray-500">
-            Model tarafından oluşturulan tahmin listesi.
-          </p>
-        </div>
+        {/* LISTING */}
+        {!loading && statusFilter === "yeni" && (
+          <div className="space-y-3">
+            {allPredictions
+              .filter(
+                (p) =>
+                  p.analysis_status === "Yeni Tahmin" &&
+                  p.result_outcome_match === "Devam Ediyor"
+              )
+              .map((p) => (
+                <PredictionCard key={p.id} {...p} />
+              ))}
+          </div>
+        )}
 
-        {/* LİSTE */}
+        {!loading && statusFilter === "analiz" && (
+          <div className="space-y-3">
+            {allPredictions
+              .filter(
+                (p) =>
+                  p.analysis_status === "Analiz Ediliyor" &&
+                  p.result_outcome_match === "Devam Ediyor"
+              )
+              .map((p) => (
+                <PredictionCard key={p.id} {...p} />
+              ))}
+          </div>
+        )}
+
+        {!loading && statusFilter === "sonuc" && (
+          <div className="space-y-3">
+            {filtered.map((p) => (
+              <PredictionCard key={p.id} {...p} />
+            ))}
+          </div>
+        )}
+
+        {/* EMPTY STATES */}
         {loading && (
-          <div className="mt-6 text-center text-xs text-slate-400">
+          <div className="mt-10 text-center text-xs text-slate-400">
             Yükleniyor...
           </div>
         )}
 
-        {!loading && predictions.length === 0 && (
-          <div className="mt-6 text-center text-xs text-slate-400">
-            Gösterilecek tahmin yok.
+        {!loading && statusFilter === "yeni" && newCount === 0 && (
+          <div className="text-center text-xs text-slate-400 mt-10">
+            Yapay Zeka yeni tahmin üretiyor...
           </div>
         )}
 
-        <div className="mt-2 space-y-3">
-          {predictions.map((p: any) => (
-            <PredictionCard
-              key={p.id}
-              {...p}
-              signal_count={p.signal_count}
-              created_at={p.created_at}
-              home_goals={p.home_goals}
-              away_goals={p.away_goals}
-            />
-          ))}
-        </div>
+        {!loading && statusFilter === "analiz" && liveCount === 0 && (
+          <div className="text-center text-xs text-slate-400 mt-10">
+            Canlı analiz bulunamadı...
+          </div>
+        )}
+
+        {filterPanelOpen && (
+          <FiltersPanel
+            filters={filters}
+            setFilters={setFilters}
+            onClose={() => setFilterPanelOpen(false)}
+            onApply={() => setFilterPanelOpen(false)}
+          />
+        )}
       </div>
     </div>
   );

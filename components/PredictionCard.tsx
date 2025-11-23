@@ -1,28 +1,44 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { getSupabase } from "@/lib/supabaseClient";
+
+const supabase = getSupabase();
+
+import {
+  addFavorite,
+  removeFavorite,
+  isFavorite,
+} from "@/services/favoriteService";
+
+import {
+  setNotifyType as saveNotify,
+  clearNotify,
+  getNotifyType,
+} from "@/services/notificationService";
+
+import { getCommentCount } from "@/services/commentService";
+import CommentModal from "./CommentModal";
 
 interface PredictionCardProps {
   id: number;
   fixture_id: number;
 
-  home_team: string;
-  away_team: string;
-  home_logo: string;
-  away_logo: string;
+  home_team?: string;
+  away_team?: string;
+  home_logo?: string;
+  away_logo?: string;
 
   elapsed: number;
+  home_goals: number;
+  away_goals: number;
+
   prediction_half: string;
   prediction_label: string;
 
-  analysis_status: string;
-  result_outcome_match: "Başarılı" | "Başarısız" | "Devam Ediyor";
+  result_outcome_match: string;
 
   created_at?: string;
-  home_goals?: number;
-  away_goals?: number;
-
-  signal_count?: number;
 
   iy_home_goal_until_ht_prob?: number;
   iy_away_goal_until_ht_prob?: number;
@@ -31,155 +47,242 @@ interface PredictionCardProps {
   ["2y_home_goal_until_ft_prob"]?: number;
   ["2y_away_goal_until_ft_prob"]?: number;
   ["2y_match_goal_until_ft_prob"]?: number;
+
+  signal_count?: number;
 }
 
 export default function PredictionCard(props: PredictionCardProps) {
-  const router = useRouter();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string>("Kullanıcı");
 
-  const isFirstHalf = props.prediction_half === "1Y";
+  const [fav, setFav] = useState(false);
+  const [notifyType, setNotifyType] =
+    useState<"ev" | "dep" | "tum" | null>(null);
+  const [commentCount, setCommentCount] = useState(0);
 
-  const evProb = isFirstHalf
-    ? props.iy_home_goal_until_ht_prob
-    : props["2y_home_goal_until_ft_prob"];
+  const [commentModal, setCommentModal] = useState(false);
 
-  const depProb = isFirstHalf
-    ? props.iy_away_goal_until_ht_prob
-    : props["2y_away_goal_until_ft_prob"];
+  /* 🔐 USER LOAD */
+  useEffect(() => {
+    const loadUser = async () => {
+      const u = await supabase.auth.getUser();
 
-  const macProb = isFirstHalf
-    ? props.iy_match_goal_until_ht_prob
-    : props["2y_match_goal_until_ft_prob"];
+      if (u.data.user) {
+        setUserId(u.data.user.id);
 
-  const timeText = props.created_at
-    ? new Date(props.created_at).toLocaleString("tr-TR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        day: "2-digit",
-        month: "2-digit",
-      })
-    : "";
+        const name =
+          u.data.user.user_metadata.display_name ||
+          u.data.user.email.split("@")[0];
 
-  // ✓ Durum Renkleri
-  const borderColors = {
-    Başarılı: "border-emerald-500/70 shadow-[0_0_12px_#00ff88aa]",
-    Başarısız: "border-red-500/70 shadow-[0_0_12px_#ff0000aa]",
-    "Devam Ediyor": "border-yellow-400/60 shadow-[0_0_12px_#ffff0099]",
+        setDisplayName(name);
+      }
+    };
+    loadUser();
+  }, []);
+
+  /* ❤️ FAVORİ + 🔔 BİLDİRİM + 💬 YORUM YÜKLE */
+  useEffect(() => {
+    if (!userId) return;
+
+    const loadStatus = async () => {
+      const favState = await isFavorite(userId, props.id);
+      setFav(favState);
+
+      const nt = await getNotifyType(userId, props.id);
+      setNotifyType(nt);
+
+      const cc = await getCommentCount(props.id);
+      setCommentCount(cc);
+    };
+
+    loadStatus();
+  }, [userId]);
+
+  /* ⭐ FAVORİ */
+  const toggleFavorite = async () => {
+    if (!userId) return;
+
+    if (fav) {
+      await removeFavorite(userId, props.id);
+      setFav(false);
+    } else {
+      await addFavorite(userId, props.id, props.fixture_id);
+      setFav(true);
+    }
   };
 
-  const borderStyle = borderColors[props.result_outcome_match];
+  /* 🔔 BİLDİRİM */
+  const toggleNotify = async (type: "ev" | "dep" | "tum") => {
+    if (!userId) return;
+
+    if (notifyType === type) {
+      await clearNotify(userId, props.id);
+      setNotifyType(null);
+    } else {
+      await saveNotify(userId, props.id, props.fixture_id, type);
+      setNotifyType(type);
+    }
+  };
+
+  /* 📊 PROB HESABI */
+  const isFirstHalf = props.prediction_half === "1Y";
+
+  const ev = isFirstHalf
+    ? props.iy_home_goal_until_ht_prob ?? 0
+    : props["2y_home_goal_until_ft_prob"] ?? 0;
+
+  const mac = isFirstHalf
+    ? props.iy_match_goal_until_ht_prob ?? 0
+    : props["2y_match_goal_until_ft_prob"] ?? 0;
+
+  const dep = isFirstHalf
+    ? props.iy_away_goal_until_ht_prob ?? 0
+    : props["2y_away_goal_until_ft_prob"] ?? 0;
+
+  /* 🟩🟥 Kart Renk */
+  const borderColor =
+    props.result_outcome_match === "Başarılı"
+      ? "border-emerald-500"
+      : props.result_outcome_match === "Başarısız"
+      ? "border-red-500"
+      : "border-yellow-400";
 
   return (
-    <div
-      onClick={() => router.push(`/prediction/${props.fixture_id}`)}
-      className={`
-        w-full bg-[#0b122d]/70 backdrop-blur-xl rounded-2xl p-4 border 
-        ${borderStyle}
-        cursor-pointer active:scale-[0.97] transition-all
-      `}
-    >
-      {/* === ÜST BÖLÜM === */}
-      <div className="flex justify-between items-start mb-2">
-        <span className="text-xs font-semibold text-emerald-400 px-2 py-0.5 rounded-full bg-emerald-400/10">
-          {isFirstHalf ? "1. Yarı" : "2. Yarı"}
-        </span>
-
-        <div className="text-right">
-          <div className="text-[11px] text-white/70">{props.elapsed}'. dk</div>
-          <div className="text-[10px] text-white/40">{timeText}</div>
-        </div>
-      </div>
-
-      {/* === SİNYAL SAYISI === */}
-      {props.signal_count && props.signal_count > 1 && (
-        <div className="text-center mb-2">
-          <span className="text-[11px] px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 font-semibold">
-            {props.signal_count} Sinyal
-          </span>
-        </div>
+    <>
+      {/* 💬 YORUM MODAL */}
+      {commentModal && (
+        <CommentModal
+          predictionId={props.id}
+          fixtureId={props.fixture_id}
+          user_id={userId!}
+          user_display_name={displayName}
+          home_team={props.home_team!}
+          away_team={props.away_team!}
+          home_logo={props.home_logo!}
+          away_logo={props.away_logo!}
+          home_goals={props.home_goals}
+          away_goals={props.away_goals}
+          fixture_minute={props.elapsed}
+          onClose={async () => {
+            setCommentModal(false);
+            setCommentCount(await getCommentCount(props.id));
+          }}
+        />
       )}
 
-      {/* === MAÇ SATIRI === */}
-      <div className="flex items-center justify-between px-1 my-3">
-        <img src={props.home_logo} className="w-8 h-8 rounded-full" />
-
-        <div className="w-1/3 text-center text-[12px] text-white/80 font-medium">
-          {props.home_team}
-        </div>
-
-        <div className="flex items-center justify-center w-16">
-          <span className="text-xl text-white font-bold">
-            {props.home_goals ?? 0}
-          </span>
-          <span className="mx-1 text-white/40">-</span>
-          <span className="text-xl text-white font-bold">
-            {props.away_goals ?? 0}
-          </span>
-        </div>
-
-        <div className="w-1/3 text-center text-[12px] text-white/80 font-medium">
-          {props.away_team}
-        </div>
-
-        <img src={props.away_logo} className="w-8 h-8 rounded-full" />
-      </div>
-
-      {/* === ORANLAR === */}
-      <div className="grid grid-cols-3 gap-2 my-3 text-center">
-        <div>
-          <div className="text-[10px] text-white/50">
-            {isFirstHalf ? "1Y Ev" : "2Y Ev"}
+      {/* 📌 KART */}
+      <div
+        className={`p-4 rounded-xl bg-slate-900 border ${borderColor} shadow-md mb-3`}
+      >
+        {/* ÜST BİLGİ */}
+        <div className="flex justify-between text-[11px] text-gray-300 mb-3">
+          <div className="flex items-center gap-1">
+            🔮 <span className="font-bold text-sky-400">{props.prediction_label}</span>
+            <span className="text-gray-400">({props.prediction_half})</span>
           </div>
-          <div className="text-emerald-400 font-bold text-sm">
-            %{evProb ? (evProb * 100).toFixed(1) : "0"}
+
+          <div>🔔 {props.signal_count || 0} Sinyal</div>
+
+          <div>
+            {props.created_at &&
+              new Date(props.created_at).toLocaleString("tr-TR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
           </div>
         </div>
 
-        <div>
-          <div className="text-[10px] text-white/50">
-            {isFirstHalf ? "1Y Maç" : "2Y Maç"}
+        <div className="border-t border-slate-700 mb-3"></div>
+
+        {/* TAKIM + SKOR */}
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-col items-center w-20">
+            <img src={props.home_logo} className="w-10 h-10 rounded-full border border-slate-600" />
+            <span className="text-[11px] text-gray-300 mt-1">{props.home_team}</span>
           </div>
-          <div className="text-emerald-400 font-bold text-sm">
-            %{macProb ? (macProb * 100).toFixed(1) : "0"}
+
+          <div className="text-center">
+            <div className="text-3xl font-bold text-white">
+              {props.home_goals} - {props.away_goals}
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">
+              ⏱ {props.elapsed}'. dk
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center w-20">
+            <img src={props.away_logo} className="w-10 h-10 rounded-full border border-slate-600" />
+            <span className="text-[11px] text-gray-300 mt-1">{props.away_team}</span>
           </div>
         </div>
 
-        <div>
-          <div className="text-[10px] text-white/50">
-            {isFirstHalf ? "1Y Dep" : "2Y Dep"}
+        <div className="border-t border-slate-700 mb-3"></div>
+
+        {/* PROBLAR */}
+        <div className="grid grid-cols-3 text-center mb-3">
+          <div>
+            <div className="text-[10px] text-gray-400">Ev</div>
+            <div className="font-bold text-emerald-400">%{(ev * 100).toFixed(0)}</div>
           </div>
-          <div className="text-emerald-400 font-bold text-sm">
-            %{depProb ? (depProb * 100).toFixed(1) : "0"}
+
+          <div>
+            <div className="text-[10px] text-gray-400">Maç</div>
+            <div className="font-bold text-emerald-400">%{(mac * 100).toFixed(0)}</div>
+          </div>
+
+          <div>
+            <div className="text-[10px] text-gray-400">Dep</div>
+            <div className="font-bold text-emerald-400">%{(dep * 100).toFixed(0)}</div>
           </div>
         </div>
-      </div>
 
-      {/* === ALT KISIM === */}
-      <div className="flex justify-between items-center mt-3">
-        <div>
-          <div className="text-[10px] text-white/50">Tahmin</div>
-          <div className="text-sm text-white font-semibold">
-            {props.prediction_label}
-          </div>
-        </div>
+        <div className="border-t border-slate-700 mb-3"></div>
 
-        <div className="text-right">
-          <div className="text-[10px] text-white/50">Durum</div>
-          <span
-            className={`
-              px-2 py-0.5 rounded-full text-xs font-semibold
-              ${
-                props.result_outcome_match === "Başarılı"
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : props.result_outcome_match === "Başarısız"
-                  ? "bg-red-500/20 text-red-400"
-                  : "bg-yellow-400/20 text-yellow-300"
-              }
-            `}
+        {/* ALT BUTONLAR */}
+        <div className="flex justify-between items-center text-[13px]">
+          {/* ⭐ FAVORİ */}
+          <button
+            onClick={toggleFavorite}
+            className={`${fav ? "text-yellow-300" : "text-gray-500"} text-xl`}
           >
-            {props.result_outcome_match}
-          </span>
+            {fav ? "⭐" : "☆"}
+          </button>
+
+          {/* 💬 YORUM */}
+          <button
+            onClick={() => setCommentModal(true)}
+            className="text-gray-400 hover:text-sky-400 text-lg"
+          >
+            💬 <span className="text-[10px]">({commentCount})</span>
+          </button>
+
+          {/* ⚽ EV */}
+          <button
+            onClick={() => toggleNotify("ev")}
+            className={`flex items-center gap-1 ${notifyType === "ev" ? "text-emerald-400" : "text-gray-500"}`}
+          >
+            ⚽ <span className="text-[11px]">Ev</span>
+          </button>
+
+          {/* ⚽ DEP */}
+          <button
+            onClick={() => toggleNotify("dep")}
+            className={`flex items-center gap-1 ${notifyType === "dep" ? "text-orange-400" : "text-gray-500"}`}
+          >
+            ⚽ <span className="text-[11px]">Dep</span>
+          </button>
+
+          {/* ⚽ TÜM */}
+          <button
+            onClick={() => toggleNotify("tum")}
+            className={`flex items-center gap-1 ${notifyType === "tum" ? "text-red-400" : "text-gray-500"}`}
+          >
+            ⚽ <span className="text-[11px]">Tümü</span>
+          </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

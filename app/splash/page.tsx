@@ -2,11 +2,13 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
+
+
 
 export default function Splash() {
   const router = useRouter();
-
+  const supabase = getSupabase();
   useEffect(() => {
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();

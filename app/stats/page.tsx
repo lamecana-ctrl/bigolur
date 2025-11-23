@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
+
 
 export default function StatsPage() {
+  const supabase = getSupabase();
   const [filter, setFilter] = useState("today");
   const [list, setList] = useState<any[]>([]);
   const [stats, setStats] = useState({
