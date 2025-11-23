@@ -326,12 +326,7 @@ export default function HomePage() {
                   p.result_outcome_match === "Devam Ediyor"
               )
               .map((p) => (
-                <PredictionCard
-                  key={p.id!}
-                  {...p}
-                  prediction_half={p.prediction_half ?? ""}
-                  prediction_label={p.prediction_label ?? ""}
-                />
+                <PredictionCard key={p.id!} {...p} />
               ))}
           </div>
         )}

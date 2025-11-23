@@ -31,10 +31,10 @@ interface PredictionCardProps {
   home_goals: number | null;
   away_goals: number | null;
 
-  prediction_half: string;
-  prediction_label: string;
+  prediction_half: string | null;
+  prediction_label: string | null;
 
-  result_outcome_match: string;
+  result_outcome_match?: string | null;
 
   created_at?: string | null;
 
@@ -49,14 +49,6 @@ interface PredictionCardProps {
   signal_count?: number | null;
 }
 
-/* 🔥 notify type normalizer */
-function normalizeNotifyType(
-  value: any
-): "ev" | "dep" | "tum" | null {
-  if (value === "ev" || value === "dep" || value === "tum") return value;
-  return null;
-}
-
 export default function PredictionCard(props: PredictionCardProps) {
   const supabase = getSupabase();
 
@@ -66,42 +58,44 @@ export default function PredictionCard(props: PredictionCardProps) {
   const [fav, setFav] = useState(false);
   const [notifyType, setNotifyType] =
     useState<"ev" | "dep" | "tum" | null>(null);
-
   const [commentCount, setCommentCount] = useState(0);
+
   const [commentModal, setCommentModal] = useState(false);
 
   /* 🔐 USER LOAD */
   useEffect(() => {
     const loadUser = async () => {
-      const u = await supabase.auth.getUser();
+      const { data } = await supabase.auth.getUser();
+      const u = data?.user;
 
-      if (u.data.user) {
-        const usr = u.data.user;
+      if (u) {
+        setUserId(u.id);
 
-        setUserId(usr.id);
-
-        const safeEmail = usr.email ?? "";
+        const safeEmail = u.email ?? "";
         const safeDisplay =
-          usr.user_metadata?.display_name ??
+          u.user_metadata?.display_name ??
           (safeEmail ? safeEmail.split("@")[0] : "Kullanıcı");
 
         setDisplayName(safeDisplay);
       }
     };
+
     loadUser();
   }, []);
 
-  /* ❤️ FAVORİ + 🔔 BİLDİRİM + 💬 YORUM */
+  /* ❤️ FAVORİ + 🔔 BİLDİRİM + 💬 YORUM YÜKLE */
   useEffect(() => {
     if (!userId) return;
 
     const loadStatus = async () => {
-      setFav(!!(await isFavorite(userId, props.id)));
+      const favState = await isFavorite(userId, props.id);
+      setFav(!!favState);
 
-      const rawNotify = await getNotifyType(userId, props.id);
-      setNotifyType(normalizeNotifyType(rawNotify));
+      const nt = await getNotifyType(userId, props.id);
+      setNotifyType(nt ?? null);
 
-      setCommentCount(await getCommentCount(props.id));
+      const cc = await getCommentCount(props.id);
+      setCommentCount(cc ?? 0);
     };
 
     loadStatus();
@@ -148,7 +142,7 @@ export default function PredictionCard(props: PredictionCardProps) {
     ? props.iy_away_goal_until_ht_prob ?? 0
     : props["2y_away_goal_until_ft_prob"] ?? 0;
 
-  /* 🟥🟩 Kart border */
+  /* 🟩🟥 Kart Renk */
   const borderColor =
     props.result_outcome_match === "Başarılı"
       ? "border-emerald-500"
@@ -159,11 +153,11 @@ export default function PredictionCard(props: PredictionCardProps) {
   return (
     <>
       {/* 💬 YORUM MODAL */}
-      {commentModal && (
+      {commentModal && userId && (
         <CommentModal
           predictionId={props.id}
           fixtureId={props.fixture_id}
-          user_id={userId!}
+          user_id={userId}
           user_display_name={displayName}
           home_team={props.home_team ?? ""}
           away_team={props.away_team ?? ""}
@@ -174,7 +168,8 @@ export default function PredictionCard(props: PredictionCardProps) {
           elapsed={props.elapsed ?? 0}
           onClose={async () => {
             setCommentModal(false);
-            setCommentCount(await getCommentCount(props.id));
+            const cc = await getCommentCount(props.id);
+            setCommentCount(cc ?? 0);
           }}
         />
       )}
@@ -186,8 +181,11 @@ export default function PredictionCard(props: PredictionCardProps) {
         {/* ÜST BİLGİ */}
         <div className="flex justify-between text-[11px] text-gray-300 mb-3">
           <div className="flex items-center gap-1">
-            🔮 <span className="font-bold text-sky-400">{props.prediction_label}</span>
-            <span className="text-gray-400">({props.prediction_half})</span>
+            🔮{" "}
+            <span className="font-bold text-sky-400">
+              {props.prediction_label ?? "-"}
+            </span>
+            <span className="text-gray-400">({props.prediction_half ?? "-"})</span>
           </div>
 
           <div>🔔 {props.signal_count ?? 0} Sinyal</div>
@@ -203,7 +201,7 @@ export default function PredictionCard(props: PredictionCardProps) {
           </div>
         </div>
 
-        <div className="border-t border-slate-700 mb-3"></div>
+        <div className="border-t border-slate-700 mb-3" />
 
         {/* TAKIM + SKOR */}
         <div className="flex justify-between items-center mb-3">
@@ -213,7 +211,7 @@ export default function PredictionCard(props: PredictionCardProps) {
               className="w-10 h-10 rounded-full border border-slate-600"
             />
             <span className="text-[11px] text-gray-300 mt-1">
-              {props.home_team}
+              {props.home_team ?? "-"}
             </span>
           </div>
 
@@ -232,12 +230,12 @@ export default function PredictionCard(props: PredictionCardProps) {
               className="w-10 h-10 rounded-full border border-slate-600"
             />
             <span className="text-[11px] text-gray-300 mt-1">
-              {props.away_team}
+              {props.away_team ?? "-"}
             </span>
           </div>
         </div>
 
-        <div className="border-t border-slate-700 mb-3"></div>
+        <div className="border-t border-slate-700 mb-3" />
 
         {/* PROB KISMI */}
         <div className="grid grid-cols-3 text-center mb-3">
@@ -263,7 +261,7 @@ export default function PredictionCard(props: PredictionCardProps) {
           </div>
         </div>
 
-        <div className="border-t border-slate-700 mb-3"></div>
+        <div className="border-t border-slate-700 mb-3" />
 
         {/* ALT BUTONLAR */}
         <div className="flex justify-between items-center text-[13px]">
