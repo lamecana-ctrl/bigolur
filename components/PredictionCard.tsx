@@ -92,7 +92,12 @@ export default function PredictionCard(props: PredictionCardProps) {
       setFav(!!favState);
 
       const nt = await getNotifyType(userId, props.id);
-      setNotifyType(nt ?? null);
+
+      // 🔥 TİP GÜVENLİ VALIDATION — Vercel hatasını çözen kısım
+      const valid =
+        nt === "ev" || nt === "dep" || nt === "tum" ? nt : null;
+
+      setNotifyType(valid);
 
       const cc = await getCommentCount(props.id);
       setCommentCount(cc ?? 0);
@@ -185,7 +190,9 @@ export default function PredictionCard(props: PredictionCardProps) {
             <span className="font-bold text-sky-400">
               {props.prediction_label ?? "-"}
             </span>
-            <span className="text-gray-400">({props.prediction_half ?? "-"})</span>
+            <span className="text-gray-400">
+              ({props.prediction_half ?? "-"})
+            </span>
           </div>
 
           <div>🔔 {props.signal_count ?? 0} Sinyal</div>
@@ -217,7 +224,9 @@ export default function PredictionCard(props: PredictionCardProps) {
 
           <div className="text-center">
             <div className="text-3xl font-bold text-white">
-              {(props.home_goals ?? 0) + " - " + (props.away_goals ?? 0)}
+              {(props.home_goals ?? 0) +
+                " - " +
+                (props.away_goals ?? 0)}
             </div>
             <div className="text-[11px] text-gray-400 mt-1">
               ⏱ {props.elapsed ?? 0}'. dk
@@ -282,7 +291,9 @@ export default function PredictionCard(props: PredictionCardProps) {
           <button
             onClick={() => toggleNotify("ev")}
             className={`flex items-center gap-1 ${
-              notifyType === "ev" ? "text-emerald-400" : "text-gray-500"
+              notifyType === "ev"
+                ? "text-emerald-400"
+                : "text-gray-500"
             }`}
           >
             ⚽ <span className="text-[11px]">Ev</span>
@@ -291,7 +302,9 @@ export default function PredictionCard(props: PredictionCardProps) {
           <button
             onClick={() => toggleNotify("dep")}
             className={`flex items-center gap-1 ${
-              notifyType === "dep" ? "text-orange-400" : "text-gray-500"
+              notifyType === "dep"
+                ? "text-orange-400"
+                : "text-gray-500"
             }`}
           >
             ⚽ <span className="text-[11px]">Dep</span>
@@ -300,7 +313,9 @@ export default function PredictionCard(props: PredictionCardProps) {
           <button
             onClick={() => toggleNotify("tum")}
             className={`flex items-center gap-1 ${
-              notifyType === "tum" ? "text-red-400" : "text-gray-500"
+              notifyType === "tum"
+                ? "text-red-400"
+                : "text-gray-500"
             }`}
           >
             ⚽ <span className="text-[11px]">Tümü</span>
