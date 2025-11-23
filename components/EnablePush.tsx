@@ -1,33 +1,44 @@
 "use client";
+
 import { useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabase } from "@/lib/supabaseClient";
 
 export default function EnablePush() {
+  const supabase = getSupabase();
 
   async function registerPush() {
+    // 1) Bildirim izni
     const permission = await Notification.requestPermission();
     if (permission !== "granted") {
       alert("Bildirim izni vermen gerekiyor.");
       return;
     }
 
-    // Service worker kaydı
+    // 2) Service worker kaydı
     const reg = await navigator.serviceWorker.register("/push-sw.js");
 
-    // Push aboneliği oluştur
+    // 3) Push aboneliği
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     });
 
-    const { data: { user } } = await supabase.auth.getUser();
+    // 4) Kullanıcıyı al
+    const { data } = await supabase.auth.getUser();
+    const user = data?.user;
 
+    if (!user) {
+      alert("Kullanıcı bulunamadı!");
+      return;
+    }
+
+    // 5) Token kaydet
     await supabase.from("push_tokens").insert({
       user_id: user.id,
       token: JSON.stringify(sub),
     });
 
-    alert("Bildirim aktif!");
+    alert("Bildirim aktif edildi!");
   }
 
   return (
