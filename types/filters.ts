@@ -1,3 +1,5 @@
+// /types/filters.ts
+
 export type Filters = {
   predictionTypes: {
     over05: boolean;

@@ -11,6 +11,7 @@ import { applyFilters } from "@/utils/filterFunctions";
 import { getSupabase } from "@/lib/supabaseClient";
 
 import type { Prediction } from "@/types/prediction";
+import type { Filters } from "@/types/filters";
 
 type TimeFilter = "today" | "yesterday" | "week" | "month";
 type StatusFilter = "yeni" | "analiz" | "sonuc";
@@ -31,10 +32,10 @@ export default function HomePage() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
-  // ---------------------------------------
-  // FILTER STATE (TS FIX — "any" as literal)
-  // ---------------------------------------
-  const [filters, setFilters] = useState({
+  // -----------------------------------
+  // DEFAULT FILTERS (TÜM TİPLER UYUMLU)
+  // -----------------------------------
+  const [filters, setFilters] = useState<Filters>({
     predictionTypes: {
       over05: false,
       over15: false,
@@ -44,29 +45,30 @@ export default function HomePage() {
     },
     probs: { home: 0, away: 0, match: 0 },
     minute: { min: 0, max: 90 },
-    score: { mode: "any" as "any", diff: 0 },
-    half: "all" as "all" | "1Y" | "2Y",
+    score: { mode: "any", diff: 0 },
+    half: "all",
     league: "",
     team: "",
   });
 
-  // ---------------------------------------
-  // AUTH CHECK
-  // ---------------------------------------
+  // -----------------------------------
+  // AUTH
+  // -----------------------------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
         router.push("/login");
         return;
       }
+
       setEmail(data.user.email || "");
       loadData();
     });
   }, []);
 
-  // ---------------------------------------
+  // -----------------------------------
   // FIRST FETCH
-  // ---------------------------------------
+  // -----------------------------------
   const loadData = async () => {
     try {
       const rows = await fetchActiveLatestPredictions();
@@ -76,9 +78,9 @@ export default function HomePage() {
     }
   };
 
-  // ---------------------------------------
-  // REALTIME INSERT + DELETE
-  // ---------------------------------------
+  // -----------------------------------
+  // REALTIME: INSERT + DELETE
+  // -----------------------------------
   useEffect(() => {
     const channel = supabase
       .channel("predictions-realtime")
@@ -89,6 +91,7 @@ export default function HomePage() {
           setAllPredictions((prev) => {
             const exists = prev.some((p) => p.id === payload.new.id);
             if (exists) return prev;
+
             return [payload.new as Prediction, ...prev];
           });
         }
@@ -105,13 +108,13 @@ export default function HomePage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel); // async değil → Vercel uyumlu
     };
   }, []);
 
-  // ---------------------------------------
-  // POLLING — 15s
-  // ---------------------------------------
+  // -----------------------------------
+  // POLLING (UPDATE) — 15 saniye
+  // -----------------------------------
   useEffect(() => {
     const interval = setInterval(async () => {
       const rows = await fetchActiveLatestPredictions();
@@ -133,6 +136,7 @@ export default function HomePage() {
                 break;
               }
             }
+
             if (changed) break;
           }
         }
@@ -145,9 +149,9 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // ---------------------------------------
-  // APPLY FILTERS
-  // ---------------------------------------
+  // -----------------------------------
+  // FILTER UYGULAMA
+  // -----------------------------------
   useEffect(() => {
     const updated = applyFilters(
       allPredictions,
@@ -158,9 +162,9 @@ export default function HomePage() {
     setFiltered(updated);
   }, [allPredictions, filters, timeFilter, statusFilter]);
 
-  // ---------------------------------------
+  // -----------------------------------
   // COUNTERS
-  // ---------------------------------------
+  // -----------------------------------
   const liveCount = new Set(
     allPredictions
       .filter(
@@ -215,12 +219,13 @@ export default function HomePage() {
   const successCount = filteredResults.filter(
     (p) => p.result_outcome_match === "Başarılı"
   ).length;
+
   const successRate =
     totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
 
-  // ---------------------------------------
+  // -----------------------------------
   // RENDER
-  // ---------------------------------------
+  // -----------------------------------
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
@@ -231,6 +236,7 @@ export default function HomePage() {
             <div className="text-3xl font-extrabold tracking-tight">
               bi<span className="text-[#22c55e]">G⚽L</span>ur
             </div>
+
             <p className="text-xs text-gray-400 mt-1">
               Hoş geldin <span className="text-[#22c55e]">{email}</span> 🔥
             </p>
@@ -249,27 +255,24 @@ export default function HomePage() {
 
         {/* TIME FILTERS */}
         <div className="flex flex-wrap gap-2 mb-4 justify-end">
-          {(["today", "yesterday", "week", "month"] as TimeFilter[]).map(
-            (mode) => (
-              <button
-                key={mode}
-                className={`px-3 py-1.5 rounded-full text-[11px] border ${
-                  timeFilter === mode
-                    ? "bg-emerald-500 text-black"
-                    : "border-slate-600 text-slate-300"
-                }`}
-                onClick={() => setTimeFilter(mode)}
-              >
-                {mode === "today"
-                  ? "Bugün"
-                  : mode === "yesterday"
-                  ? "Dün"
-                  : mode === "week"
-                  ? "Bu Hafta"
-                  : "Bu Ay"}
-              </button>
-            )
-          )}
+          {[
+            { key: "today", label: "Bugün" },
+            { key: "yesterday", label: "Dün" },
+            { key: "week", label: "Bu Hafta" },
+            { key: "month", label: "Bu Ay" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              className={`px-3 py-1.5 rounded-full text-[11px] border ${
+                timeFilter === t.key
+                  ? "bg-emerald-500 text-black"
+                  : "border-slate-600 text-slate-300"
+              }`}
+              onClick={() => setTimeFilter(t.key as TimeFilter)}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* COUNTERS */}
@@ -291,54 +294,35 @@ export default function HomePage() {
 
           <div className="p-2 rounded-xl bg-[#0f172a] border border-green-600 text-center">
             <div className="text-[11px] text-green-300">Başarılı</div>
-            <div className="text-green-400 font-bold text-lg">
-              {successCount}
-            </div>
+            <div className="text-green-400 font-bold text-lg">{successCount}</div>
           </div>
 
           <div className="p-2 rounded-xl bg-[#0f172a] border border-yellow-600 text-center">
             <div className="text-[11px] text-yellow-300">%Oran</div>
-            <div className="text-yellow-400 font-bold text-lg">
-              %{successRate}
-            </div>
+            <div className="text-yellow-400 font-bold text-lg">%{successRate}</div>
           </div>
         </div>
 
         {/* STATUS FILTERS */}
         <div className="flex justify-between items-center mb-4">
           <div className="flex gap-2">
-            <button
-              className={`px-4 py-1 rounded-full text-[12px] border ${
-                statusFilter === "yeni"
-                  ? "bg-sky-500 text-black"
-                  : "border-slate-700 text-slate-300"
-              }`}
-              onClick={() => setStatusFilter("yeni")}
-            >
-              Yeni Tahmin
-            </button>
-
-            <button
-              className={`px-4 py-1 rounded-full text-[12px] border ${
-                statusFilter === "analiz"
-                  ? "bg-sky-500 text-black"
-                  : "border-slate-700 text-slate-300"
-              }`}
-              onClick={() => setStatusFilter("analiz")}
-            >
-              Canlı Analiz
-            </button>
-
-            <button
-              className={`px-4 py-1 rounded-full text-[12px] border ${
-                statusFilter === "sonuc"
-                  ? "bg-sky-500 text-black"
-                  : "border-slate-700 text-slate-300"
-              }`}
-              onClick={() => setStatusFilter("sonuc")}
-            >
-              Sonuçlar
-            </button>
+            {[
+              { key: "yeni", label: "Yeni Tahmin" },
+              { key: "analiz", label: "Canlı Analiz" },
+              { key: "sonuc", label: "Sonuçlar" },
+            ].map((s) => (
+              <button
+                key={s.key}
+                className={`px-4 py-1 rounded-full text-[12px] border ${
+                  statusFilter === s.key
+                    ? "bg-sky-500 text-black"
+                    : "border-slate-700 text-slate-300"
+                }`}
+                onClick={() => setStatusFilter(s.key as StatusFilter)}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex gap-2">
@@ -423,6 +407,7 @@ export default function HomePage() {
             onApply={() => setFilterPanelOpen(false)}
           />
         )}
+
       </div>
     </div>
   );

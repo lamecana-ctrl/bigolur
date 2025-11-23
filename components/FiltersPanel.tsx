@@ -1,37 +1,7 @@
 "use client";
 
 import React from "react";
-
-type Filters = {
-  predictionTypes: {
-    over05: boolean;
-    over15: boolean;
-    over25: boolean;
-    over35: boolean;
-    over45: boolean;
-  };
-
-  probs: {
-    home: number;
-    away: number;
-    match: number;
-  };
-
-  minute: {
-    min: number;
-    max: number;
-  };
-
-  score: {
-    mode: "any" | "draw" | "home" | "away";
-    diff: number;
-  };
-
-  half: "all" | "1Y" | "2Y";
-
-  league: string;
-  team: string;
-};
+import type { Filters } from "@/types/filters";
 
 type PanelProps = {
   filters: Filters;
@@ -40,7 +10,6 @@ type PanelProps = {
   onApply: () => void;
 };
 
-// Küçük UI helper
 const ButtonToggle = ({
   active,
   onClick,
@@ -74,7 +43,7 @@ export default function FiltersPanel({
 
         <h2 className="text-lg font-bold text-white mb-4">Filtreler</h2>
 
-        {/* ===== ÜST TAHMİNLER ===== */}
+        {/* ÜST TAHMİNLER */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-2">Üst Tahminleri</p>
 
@@ -88,13 +57,13 @@ export default function FiltersPanel({
             ].map((f) => (
               <ButtonToggle
                 key={f.key}
-                active={filters.predictionTypes[f.key]}
+                active={filters.predictionTypes[f.key as keyof Filters["predictionTypes"]]}
                 onClick={() =>
                   setFilters({
                     ...filters,
                     predictionTypes: {
                       ...filters.predictionTypes,
-                      [f.key]: !filters.predictionTypes[f.key],
+                      [f.key]: !filters.predictionTypes[f.key as keyof Filters["predictionTypes"]],
                     },
                   })
                 }
@@ -105,63 +74,34 @@ export default function FiltersPanel({
           </div>
         </div>
 
-        {/* ===== GOL OLASILIK SLIDER ===== */}
+        {/* GOL OLASILIĞI */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-2">Gol Olasılığı (%)</p>
 
-          <div className="mb-3">
-            <label className="text-xs text-gray-400">Ev Gol ≥ %{filters.probs.home}</label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={filters.probs.home}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  probs: { ...filters.probs, home: Number(e.target.value) },
-                })
-              }
-              className="w-full mt-1"
-            />
-          </div>
+          {(["home", "away", "match"] as const).map((k) => (
+            <div key={k} className="mb-3">
+              <label className="text-xs text-gray-400 capitalize">
+                {k} Gol ≥ %{filters.probs[k]}
+              </label>
 
-          <div className="mb-3">
-            <label className="text-xs text-gray-400">Dep Gol ≥ %{filters.probs.away}</label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={filters.probs.away}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  probs: { ...filters.probs, away: Number(e.target.value) },
-                })
-              }
-              className="w-full mt-1"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400">Maç Gol ≥ %{filters.probs.match}</label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={filters.probs.match}
-              onChange={(e) =>
-                setFilters({
-                  ...filters,
-                  probs: { ...filters.probs, match: Number(e.target.value) },
-                })
-              }
-              className="w-full mt-1"
-            />
-          </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={filters.probs[k]}
+                onChange={(e) =>
+                  setFilters({
+                    ...filters,
+                    probs: { ...filters.probs, [k]: Number(e.target.value) },
+                  })
+                }
+                className="w-full mt-1"
+              />
+            </div>
+          ))}
         </div>
 
-        {/* ===== DAKİKA SLIDER ===== */}
+        {/* DAKİKA */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-2">Dakika Aralığı</p>
 
@@ -198,7 +138,7 @@ export default function FiltersPanel({
           />
         </div>
 
-        {/* ===== SKOR FARKI ===== */}
+        {/* SKOR DURUMU */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-2">Skor Durumu</p>
 
@@ -213,7 +153,10 @@ export default function FiltersPanel({
                 key={m.key}
                 active={filters.score.mode === m.key}
                 onClick={() =>
-                  setFilters({ ...filters, score: { ...filters.score, mode: m.key as any } })
+                  setFilters({
+                    ...filters,
+                    score: { ...filters.score, mode: m.key as Filters["score"]["mode"] },
+                  })
                 }
               >
                 {m.label}
@@ -240,7 +183,7 @@ export default function FiltersPanel({
           />
         </div>
 
-        {/* ===== YARI FİLTRESİ ===== */}
+        {/* YARI */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-2">Yarı</p>
 
@@ -249,7 +192,12 @@ export default function FiltersPanel({
               <ButtonToggle
                 key={h}
                 active={filters.half === h}
-                onClick={() => setFilters({ ...filters, half: h as any })}
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    half: h as Filters["half"],
+                  })
+                }
               >
                 {h === "all" ? "Tümü" : h}
               </ButtonToggle>
@@ -257,7 +205,7 @@ export default function FiltersPanel({
           </div>
         </div>
 
-        {/* ===== LIG ===== */}
+        {/* LİG */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-1">Lig</p>
 
@@ -272,7 +220,7 @@ export default function FiltersPanel({
           />
         </div>
 
-        {/* ===== TAKIM ===== */}
+        {/* TAKIM */}
         <div className="mb-6">
           <p className="text-sm text-gray-300 mb-1">Takım</p>
 
@@ -287,7 +235,7 @@ export default function FiltersPanel({
           />
         </div>
 
-        {/* ===== BUTONLAR ===== */}
+        {/* BUTONLAR */}
         <div className="flex gap-3 mt-4">
           <button
             onClick={onClose}
@@ -303,6 +251,7 @@ export default function FiltersPanel({
             Uygula
           </button>
         </div>
+
       </div>
     </div>
   );
