@@ -1,5 +1,3 @@
-import { Prediction } from "@/services/predictionService";
-
 // =============================
 // ZAMAN FİLTRESİ
 // =============================
@@ -43,7 +41,7 @@ function isWithinRange(dateStr: string, filter: string): boolean {
 // =============================
 // GOL OLASI DEĞERLERİ
 // =============================
-function getGoalProbs(p: Prediction) {
+function getGoalProbs(p: any) {
   if (p.prediction_half === "1Y") {
     return {
       home: p.iy_home_goal_until_ht_prob,
@@ -62,7 +60,7 @@ function getGoalProbs(p: Prediction) {
 // =============================
 // SKOR FARKI
 // =============================
-function getScoreDiff(p: Prediction): number {
+function getScoreDiff(p: any): number {
   if (typeof p.home_goals !== "number" || typeof p.away_goals !== "number")
     return 0;
   return p.home_goals - p.away_goals;
@@ -72,11 +70,11 @@ function getScoreDiff(p: Prediction): number {
 // ANA FONKSİYON
 // =============================
 export function applyFilters(
-  list: Prediction[],
+  list: any[],
   filters: any,
   timeFilter: string,
   statusFilter: string
-): Prediction[] {
+): any[] {
   return list.filter((p) => {
     // 1) ZAMAN
     if (!isWithinRange(p.created_at, timeFilter)) return false;
