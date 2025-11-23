@@ -24,10 +24,10 @@ interface PredictionCardProps {
   id: number;
   fixture_id: number;
 
-  home_team?: string;
-  away_team?: string;
-  home_logo?: string;
-  away_logo?: string;
+  home_team: string | null;
+  away_team: string | null;
+  home_logo: string | null;
+  away_logo: string | null;
 
   elapsed: number;
   home_goals: number;
@@ -38,17 +38,17 @@ interface PredictionCardProps {
 
   result_outcome_match: string;
 
-  created_at?: string;
+  created_at?: string | null;
 
-  iy_home_goal_until_ht_prob?: number;
-  iy_away_goal_until_ht_prob?: number;
-  iy_match_goal_until_ht_prob?: number;
+  iy_home_goal_until_ht_prob?: number | null;
+  iy_away_goal_until_ht_prob?: number | null;
+  iy_match_goal_until_ht_prob?: number | null;
 
-  ["2y_home_goal_until_ft_prob"]?: number;
-  ["2y_away_goal_until_ft_prob"]?: number;
-  ["2y_match_goal_until_ft_prob"]?: number;
+  ["2y_home_goal_until_ft_prob"]?: number | null;
+  ["2y_away_goal_until_ft_prob"]?: number | null;
+  ["2y_match_goal_until_ft_prob"]?: number | null;
 
-  signal_count?: number;
+  signal_count?: number | null;
 }
 
 export default function PredictionCard(props: PredictionCardProps) {
@@ -61,6 +61,15 @@ export default function PredictionCard(props: PredictionCardProps) {
   const [commentCount, setCommentCount] = useState(0);
 
   const [commentModal, setCommentModal] = useState(false);
+
+  const placeholderLogo =
+    "https://upload.wikimedia.org/wikipedia/commons/a/ac/No_image_available.svg";
+
+  const safeHomeLogo = props.home_logo ?? placeholderLogo;
+  const safeAwayLogo = props.away_logo ?? placeholderLogo;
+
+  const safeHomeTeam = props.home_team ?? "-";
+  const safeAwayTeam = props.away_team ?? "-";
 
   /* 🔐 USER LOAD */
   useEffect(() => {
@@ -80,7 +89,7 @@ export default function PredictionCard(props: PredictionCardProps) {
     loadUser();
   }, []);
 
-  /* ❤️ FAVORİ + 🔔 BİLDİRİM + 💬 YORUM YÜKLE */
+  /* ❤️ FAVORİ + 🔔 BİLDİRİM + 💬 YORUM */
   useEffect(() => {
     if (!userId) return;
 
@@ -124,7 +133,7 @@ export default function PredictionCard(props: PredictionCardProps) {
     }
   };
 
-  /* 📊 PROB HESABI */
+  /* 📊 PROBLAR */
   const isFirstHalf = props.prediction_half === "1Y";
 
   const ev = isFirstHalf
@@ -149,17 +158,16 @@ export default function PredictionCard(props: PredictionCardProps) {
 
   return (
     <>
-      {/* 💬 YORUM MODAL */}
       {commentModal && (
         <CommentModal
           predictionId={props.id}
           fixtureId={props.fixture_id}
           user_id={userId!}
           user_display_name={displayName}
-          home_team={props.home_team!}
-          away_team={props.away_team!}
-          home_logo={props.home_logo!}
-          away_logo={props.away_logo!}
+          home_team={safeHomeTeam}
+          away_team={safeAwayTeam}
+          home_logo={safeHomeLogo}
+          away_logo={safeAwayLogo}
           home_goals={props.home_goals}
           away_goals={props.away_goals}
           fixture_minute={props.elapsed}
@@ -170,7 +178,7 @@ export default function PredictionCard(props: PredictionCardProps) {
         />
       )}
 
-      {/* 📌 KART */}
+      {/* KART */}
       <div
         className={`p-4 rounded-xl bg-slate-900 border ${borderColor} shadow-md mb-3`}
       >
@@ -181,7 +189,7 @@ export default function PredictionCard(props: PredictionCardProps) {
             <span className="text-gray-400">({props.prediction_half})</span>
           </div>
 
-          <div>🔔 {props.signal_count || 0} Sinyal</div>
+          <div>🔔 {props.signal_count ?? 0} Sinyal</div>
 
           <div>
             {props.created_at &&
@@ -199,8 +207,8 @@ export default function PredictionCard(props: PredictionCardProps) {
         {/* TAKIM + SKOR */}
         <div className="flex justify-between items-center mb-3">
           <div className="flex flex-col items-center w-20">
-            <img src={props.home_logo} className="w-10 h-10 rounded-full border border-slate-600" />
-            <span className="text-[11px] text-gray-300 mt-1">{props.home_team}</span>
+            <img src={safeHomeLogo} className="w-10 h-10 rounded-full border border-slate-600" />
+            <span className="text-[11px] text-gray-300 mt-1">{safeHomeTeam}</span>
           </div>
 
           <div className="text-center">
@@ -213,8 +221,8 @@ export default function PredictionCard(props: PredictionCardProps) {
           </div>
 
           <div className="flex flex-col items-center w-20">
-            <img src={props.away_logo} className="w-10 h-10 rounded-full border border-slate-600" />
-            <span className="text-[11px] text-gray-300 mt-1">{props.away_team}</span>
+            <img src={safeAwayLogo} className="w-10 h-10 rounded-full border border-slate-600" />
+            <span className="text-[11px] text-gray-300 mt-1">{safeAwayTeam}</span>
           </div>
         </div>
 
@@ -242,7 +250,6 @@ export default function PredictionCard(props: PredictionCardProps) {
 
         {/* ALT BUTONLAR */}
         <div className="flex justify-between items-center text-[13px]">
-          {/* ⭐ FAVORİ */}
           <button
             onClick={toggleFavorite}
             className={`${fav ? "text-yellow-300" : "text-gray-500"} text-xl`}
@@ -250,7 +257,6 @@ export default function PredictionCard(props: PredictionCardProps) {
             {fav ? "⭐" : "☆"}
           </button>
 
-          {/* 💬 YORUM */}
           <button
             onClick={() => setCommentModal(true)}
             className="text-gray-400 hover:text-sky-400 text-lg"
@@ -258,26 +264,29 @@ export default function PredictionCard(props: PredictionCardProps) {
             💬 <span className="text-[10px]">({commentCount})</span>
           </button>
 
-          {/* ⚽ EV */}
           <button
             onClick={() => toggleNotify("ev")}
-            className={`flex items-center gap-1 ${notifyType === "ev" ? "text-emerald-400" : "text-gray-500"}`}
+            className={`flex items-center gap-1 ${
+              notifyType === "ev" ? "text-emerald-400" : "text-gray-500"
+            }`}
           >
             ⚽ <span className="text-[11px]">Ev</span>
           </button>
 
-          {/* ⚽ DEP */}
           <button
             onClick={() => toggleNotify("dep")}
-            className={`flex items-center gap-1 ${notifyType === "dep" ? "text-orange-400" : "text-gray-500"}`}
+            className={`flex items-center gap-1 ${
+              notifyType === "dep" ? "text-orange-400" : "text-gray-500"
+            }`}
           >
             ⚽ <span className="text-[11px]">Dep</span>
           </button>
 
-          {/* ⚽ TÜM */}
           <button
             onClick={() => toggleNotify("tum")}
-            className={`flex items-center gap-1 ${notifyType === "tum" ? "text-red-400" : "text-gray-500"}`}
+            className={`flex items-center gap-1 ${
+              notifyType === "tum" ? "text-red-400" : "text-gray-500"
+            }`}
           >
             ⚽ <span className="text-[11px]">Tümü</span>
           </button>
