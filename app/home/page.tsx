@@ -32,7 +32,7 @@ export default function HomePage() {
   const [sortOpen, setSortOpen] = useState(false);
 
   // -------------------------------
-  // FILTER STATE (aktif)
+  // FILTER STATE
   // -------------------------------
   const [filters, setFilters] = useState({
     predictionTypes: {
@@ -107,11 +107,13 @@ export default function HomePage() {
 
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      supabase.removeChannel(channel); // ❗ async değil → Vercel sorunsuz
+    };
   }, []);
 
   // -------------------------------
-  // POLLING (UPDATE için) — 15sn
+  // POLLING (UPDATE — 15s)
   // -------------------------------
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -150,7 +152,12 @@ export default function HomePage() {
   // FILTERS APPLY
   // -------------------------------
   useEffect(() => {
-    const updated = applyFilters(allPredictions, filters, timeFilter, statusFilter);
+    const updated = applyFilters(
+      allPredictions,
+      filters,
+      timeFilter,
+      statusFilter
+    );
     setFiltered(updated);
   }, [allPredictions, filters, timeFilter, statusFilter]);
 
@@ -215,23 +222,6 @@ export default function HomePage() {
     totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
 
   // -------------------------------
-  // UI CLASSES
-  // -------------------------------
-  const timeBtn = (mode: TimeFilter) =>
-    `px-3 py-1.5 rounded-full text-[11px] border ${
-      timeFilter === mode
-        ? "bg-emerald-500 text-black"
-        : "border-slate-600 text-slate-300"
-    }`;
-
-  const statusBtn = (mode: StatusFilter) =>
-    `px-4 py-1 rounded-full text-[12px] border ${
-      statusFilter === mode
-        ? "bg-sky-500 text-black"
-        : "border-slate-700 text-slate-300"
-    }`;
-
-  // -------------------------------
   // RENDER
   // -------------------------------
   return (
@@ -262,10 +252,33 @@ export default function HomePage() {
 
         {/* TIME FILTERS */}
         <div className="flex flex-wrap gap-2 mb-4 justify-end">
-          <button className={timeBtn("today")} onClick={() => setTimeFilter("today")}>Bugün</button>
-          <button className={timeBtn("yesterday")} onClick={() => setTimeFilter("yesterday")}>Dün</button>
-          <button className={timeBtn("week")} onClick={() => setTimeFilter("week")}>Bu Hafta</button>
-          <button className={timeBtn("month")} onClick={() => setTimeFilter("month")}>Bu Ay</button>
+          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
+            timeFilter === "today"
+              ? "bg-emerald-500 text-black"
+              : "border-slate-600 text-slate-300"
+          }`}
+          onClick={() => setTimeFilter("today")}>Bugün</button>
+
+          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
+            timeFilter === "yesterday"
+              ? "bg-emerald-500 text-black"
+              : "border-slate-600 text-slate-300"
+          }`}
+          onClick={() => setTimeFilter("yesterday")}>Dün</button>
+
+          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
+            timeFilter === "week"
+              ? "bg-emerald-500 text-black"
+              : "border-slate-600 text-slate-300"
+          }`}
+          onClick={() => setTimeFilter("week")}>Bu Hafta</button>
+
+          <button className={`px-3 py-1.5 rounded-full text-[11px] border ${
+            timeFilter === "month"
+              ? "bg-emerald-500 text-black"
+              : "border-slate-600 text-slate-300"
+          }`}
+          onClick={() => setTimeFilter("month")}>Bu Ay</button>
         </div>
 
         {/* COUNTERS */}
@@ -299,13 +312,36 @@ export default function HomePage() {
         {/* STATUS FILTERS */}
         <div className="flex justify-between items-center mb-4">
           <div className="flex gap-2">
-            <button className={statusBtn("yeni")} onClick={() => setStatusFilter("yeni")}>
+            <button
+              className={`px-4 py-1 rounded-full text-[12px] border ${
+                statusFilter === "yeni"
+                  ? "bg-sky-500 text-black"
+                  : "border-slate-700 text-slate-300"
+              }`}
+              onClick={() => setStatusFilter("yeni")}
+            >
               Yeni Tahmin
             </button>
-            <button className={statusBtn("analiz")} onClick={() => setStatusFilter("analiz")}>
+
+            <button
+              className={`px-4 py-1 rounded-full text-[12px] border ${
+                statusFilter === "analiz"
+                  ? "bg-sky-500 text-black"
+                  : "border-slate-700 text-slate-300"
+              }`}
+              onClick={() => setStatusFilter("analiz")}
+            >
               Canlı Analiz
             </button>
-            <button className={statusBtn("sonuc")} onClick={() => setStatusFilter("sonuc")}>
+
+            <button
+              className={`px-4 py-1 rounded-full text-[12px] border ${
+                statusFilter === "sonuc"
+                  ? "bg-sky-500 text-black"
+                  : "border-slate-700 text-slate-300"
+              }`}
+              onClick={() => setStatusFilter("sonuc")}
+            >
               Sonuçlar
             </button>
           </div>
