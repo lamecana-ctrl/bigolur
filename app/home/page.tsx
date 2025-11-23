@@ -33,7 +33,7 @@ export default function HomePage() {
   const [sortOpen, setSortOpen] = useState(false);
 
   // -----------------------------------
-  // DEFAULT FILTERS (TÜM TİPLER UYUMLU)
+  // DEFAULT FILTERS
   // -----------------------------------
   const [filters, setFilters] = useState<Filters>({
     predictionTypes: {
@@ -67,7 +67,7 @@ export default function HomePage() {
   }, []);
 
   // -----------------------------------
-  // FIRST FETCH
+  // INITIAL FETCH
   // -----------------------------------
   const loadData = async () => {
     try {
@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   // -----------------------------------
-  // REALTIME: INSERT + DELETE
+  // REALTIME LISTENER
   // -----------------------------------
   useEffect(() => {
     const channel = supabase
@@ -89,9 +89,7 @@ export default function HomePage() {
         { event: "INSERT", schema: "public", table: "predictions" },
         (payload) => {
           setAllPredictions((prev) => {
-            const exists = prev.some((p) => p.id === payload.new.id);
-            if (exists) return prev;
-
+            if (prev.some((p) => p.id === payload.new.id)) return prev;
             return [payload.new as Prediction, ...prev];
           });
         }
@@ -108,45 +106,20 @@ export default function HomePage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel); // async değil → Vercel uyumlu
+      supabase.removeChannel(channel);
     };
   }, []);
 
   // -----------------------------------
-  // POLLING (UPDATE) — 15 saniye
+  // POLLING (every 15 sec)
   // -----------------------------------
   useEffect(() => {
-    const interval = setInterval(async () => {
+    const int = setInterval(async () => {
       const rows = await fetchActiveLatestPredictions();
-
-      setAllPredictions((prev) => {
-        let changed = false;
-
-        if (rows.length !== prev.length) changed = true;
-
-        if (!changed) {
-          for (let i = 0; i < rows.length; i++) {
-            const a = prev[i];
-            const b = rows[i];
-            if (!a || !b) continue;
-
-            for (const key in b) {
-              if (a[key as keyof Prediction] !== b[key as keyof Prediction]) {
-                changed = true;
-                break;
-              }
-            }
-
-            if (changed) break;
-          }
-        }
-
-        if (!changed) return prev;
-        return rows;
-      });
+      setAllPredictions(rows);
     }, 15000);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(int);
   }, []);
 
   // -----------------------------------
@@ -190,7 +163,8 @@ export default function HomePage() {
   );
 
   const filteredResults = resultPool.filter((p) => {
-    const created = new Date(p.created_at!);
+    if (!p.created_at) return false;
+    const created = new Date(p.created_at);
     const now = new Date();
 
     let start = new Date();
@@ -233,7 +207,7 @@ export default function HomePage() {
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <div className="text-3xl font-extrabold tracking-tight">
+            <div className="text-3xl font-extrabold">
               bi<span className="text-[#22c55e]">G⚽L</span>ur
             </div>
 
@@ -352,7 +326,12 @@ export default function HomePage() {
                   p.result_outcome_match === "Devam Ediyor"
               )
               .map((p) => (
-                <PredictionCard key={p.id!} {...p} />
+                <PredictionCard
+                  key={p.id!}
+                  {...p}
+                  prediction_half={p.prediction_half ?? ""}
+                  prediction_label={p.prediction_label ?? ""}
+                />
               ))}
           </div>
         )}
@@ -366,7 +345,12 @@ export default function HomePage() {
                   p.result_outcome_match === "Devam Ediyor"
               )
               .map((p) => (
-                <PredictionCard key={p.id!} {...p} />
+                <PredictionCard
+                  key={p.id!}
+                  {...p}
+                  prediction_half={p.prediction_half ?? ""}
+                  prediction_label={p.prediction_label ?? ""}
+                />
               ))}
           </div>
         )}
@@ -374,7 +358,12 @@ export default function HomePage() {
         {!loading && statusFilter === "sonuc" && (
           <div className="space-y-3">
             {filtered.map((p) => (
-              <PredictionCard key={p.id!} {...p} />
+              <PredictionCard
+                key={p.id!}
+                {...p}
+                prediction_half={p.prediction_half ?? ""}
+                prediction_label={p.prediction_label ?? ""}
+              />
             ))}
           </div>
         )}
