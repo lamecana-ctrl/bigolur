@@ -1,4 +1,6 @@
-import type { Tables } from "@/lib/database.types";
+// types/prediction.ts
 
-// Supabase 'predictions' tablosundaki Row tipinin tamamı
-export type Prediction = Tables<"predictions">;
+import type { Database } from "@/lib/database.types";
+
+export type Prediction =
+  Database["public"]["Tables"]["predictions"]["Row"];
