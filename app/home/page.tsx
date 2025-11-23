@@ -10,6 +10,8 @@ import { fetchActiveLatestPredictions } from "@/services/predictionService";
 import { applyFilters } from "@/utils/filterFunctions";
 import { getSupabase } from "@/lib/supabaseClient";
 
+import type { Prediction } from "@/types/prediction";
+
 type TimeFilter = "today" | "yesterday" | "week" | "month";
 type StatusFilter = "yeni" | "analiz" | "sonuc";
 
@@ -29,6 +31,9 @@ export default function HomePage() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
 
+  // -------------------------------
+  // FILTER STATE (aktif)
+  // -------------------------------
   const [filters, setFilters] = useState({
     predictionTypes: {
       over05: false,
@@ -45,20 +50,23 @@ export default function HomePage() {
     team: "",
   });
 
+  // -------------------------------
   // AUTH
+  // -------------------------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (error || !data.user) {
         router.push("/login");
         return;
       }
-
       setEmail(data.user.email || "");
       loadData();
     });
   }, []);
 
+  // -------------------------------
   // FIRST FETCH
+  // -------------------------------
   const loadData = async () => {
     try {
       const rows = await fetchActiveLatestPredictions();
@@ -68,12 +76,13 @@ export default function HomePage() {
     }
   };
 
+  // -------------------------------
   // REALTIME (INSERT + DELETE)
+  // -------------------------------
   useEffect(() => {
     const channel = supabase
       .channel("predictions-realtime")
 
-      // INSERT → sadece ekle
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "predictions" },
@@ -81,12 +90,11 @@ export default function HomePage() {
           setAllPredictions((prev) => {
             const exists = prev.some((p) => p.id === payload.new.id);
             if (exists) return prev;
-            return [payload.new, ...prev];
+            return [payload.new as Prediction, ...prev];
           });
         }
       )
 
-      // DELETE → sadece çıkar
       .on(
         "postgres_changes",
         { event: "DELETE", schema: "public", table: "predictions" },
@@ -102,28 +110,31 @@ export default function HomePage() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // POLLING — UPDATE işlemleri için (15 saniye)
+  // -------------------------------
+  // POLLING (UPDATE için) — 15sn
+  // -------------------------------
   useEffect(() => {
     const interval = setInterval(async () => {
       const rows = await fetchActiveLatestPredictions();
 
       setAllPredictions((prev) => {
-        const prevMap = new Map(prev.map((p) => [p.id, p]));
-        const nextMap = new Map(rows.map((p) => [p.id, p]));
-
         let changed = false;
 
-        for (const id of nextMap.keys()) {
-          const oldRow = prevMap.get(id);
-          const newRow = nextMap.get(id);
-          if (!oldRow) continue;
+        if (rows.length !== prev.length) changed = true;
 
-          // field-by-field karşılaştırma
-          for (const key in newRow) {
-            if (newRow[key] !== oldRow[key]) {
-              changed = true;
-              break;
+        if (!changed) {
+          for (let i = 0; i < rows.length; i++) {
+            const a = prev[i];
+            const b = rows[i];
+            if (!a || !b) continue;
+
+            for (const key in b) {
+              if (a[key as keyof Prediction] !== b[key as keyof Prediction]) {
+                changed = true;
+                break;
+              }
             }
+            if (changed) break;
           }
         }
 
@@ -135,18 +146,17 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // FILTERS
+  // -------------------------------
+  // FILTERS APPLY
+  // -------------------------------
   useEffect(() => {
-    const updated = applyFilters(
-      allPredictions,
-      filters,
-      timeFilter,
-      statusFilter
-    );
+    const updated = applyFilters(allPredictions, filters, timeFilter, statusFilter);
     setFiltered(updated);
   }, [allPredictions, filters, timeFilter, statusFilter]);
 
+  // -------------------------------
   // COUNTERS
+  // -------------------------------
   const liveCount = new Set(
     allPredictions
       .filter(
@@ -168,11 +178,11 @@ export default function HomePage() {
   ).size;
 
   const resultPool = allPredictions.filter((p) =>
-    ["Başarılı", "Başarısız"].includes(p.result_outcome_match)
+    ["Başarılı", "Başarısız"].includes(p.result_outcome_match ?? "")
   );
 
   const filteredResults = resultPool.filter((p) => {
-    const created = new Date(p.created_at);
+    const created = new Date(p.created_at!);
     const now = new Date();
 
     let start = new Date();
@@ -191,15 +201,7 @@ export default function HomePage() {
       end.setHours(23, 59, 59, 999);
     } else {
       start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999
-      );
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     }
 
     return created >= start && created <= end;
@@ -212,7 +214,9 @@ export default function HomePage() {
   const successRate =
     totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 0;
 
-  // UI classes
+  // -------------------------------
+  // UI CLASSES
+  // -------------------------------
   const timeBtn = (mode: TimeFilter) =>
     `px-3 py-1.5 rounded-full text-[11px] border ${
       timeFilter === mode
@@ -227,9 +231,13 @@ export default function HomePage() {
         : "border-slate-700 text-slate-300"
     }`;
 
+  // -------------------------------
+  // RENDER
+  // -------------------------------
   return (
     <div className="min-h-screen flex justify-center bg-[#020617] px-3 py-4">
       <div className="w-full max-w-md">
+
         {/* HEADER */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -254,18 +262,10 @@ export default function HomePage() {
 
         {/* TIME FILTERS */}
         <div className="flex flex-wrap gap-2 mb-4 justify-end">
-          <button className={timeBtn("today")} onClick={() => setTimeFilter("today")}>
-            Bugün
-          </button>
-          <button className={timeBtn("yesterday")} onClick={() => setTimeFilter("yesterday")}>
-            Dün
-          </button>
-          <button className={timeBtn("week")} onClick={() => setTimeFilter("week")}>
-            Bu Hafta
-          </button>
-          <button className={timeBtn("month")} onClick={() => setTimeFilter("month")}>
-            Bu Ay
-          </button>
+          <button className={timeBtn("today")} onClick={() => setTimeFilter("today")}>Bugün</button>
+          <button className={timeBtn("yesterday")} onClick={() => setTimeFilter("yesterday")}>Dün</button>
+          <button className={timeBtn("week")} onClick={() => setTimeFilter("week")}>Bu Hafta</button>
+          <button className={timeBtn("month")} onClick={() => setTimeFilter("month")}>Bu Ay</button>
         </div>
 
         {/* COUNTERS */}
@@ -337,7 +337,7 @@ export default function HomePage() {
                   p.result_outcome_match === "Devam Ediyor"
               )
               .map((p) => (
-                <PredictionCard key={p.id} {...p} />
+                <PredictionCard key={p.id!} {...p} />
               ))}
           </div>
         )}
@@ -351,7 +351,7 @@ export default function HomePage() {
                   p.result_outcome_match === "Devam Ediyor"
               )
               .map((p) => (
-                <PredictionCard key={p.id} {...p} />
+                <PredictionCard key={p.id!} {...p} />
               ))}
           </div>
         )}
@@ -359,7 +359,7 @@ export default function HomePage() {
         {!loading && statusFilter === "sonuc" && (
           <div className="space-y-3">
             {filtered.map((p) => (
-              <PredictionCard key={p.id} {...p} />
+              <PredictionCard key={p.id!} {...p} />
             ))}
           </div>
         )}
@@ -383,6 +383,7 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* FILTER PANEL */}
         {filterPanelOpen && (
           <FiltersPanel
             filters={filters}
